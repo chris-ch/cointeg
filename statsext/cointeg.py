@@ -269,13 +269,13 @@ def coint_johansen(x, p, k):
     result['rkt'] = rkt
     result['r0t'] = r0t
     result['eig'] = a
-    result['evec'] = d  # transposed compared to matlab ?
+    result['eigen_vectors'] = d
     result['trace_statistic'] = lr1
     result['lr2'] = lr2
     result['critical_values'] = cvt
     result['cvm'] = cvm
     result['ind'] = aind
-    result['meth'] = 'johansen'
+    result['method'] = 'johansen'
 
     return result
 
@@ -290,13 +290,13 @@ def get_johansen(y, p):
     jres = coint_johansen(y, 0, p)
     trace_statistic = jres['trace_statistic']  # trace statistic
     critical_values = jres['critical_values']
-    r = 0
+    count_cointegration_vectors = 0
     for i in range(l):
         if trace_statistic[i] > critical_values[i, 1]:  # 0: 90%  1:95% 2: 99%
-            r = i + 1
+            count_cointegration_vectors = i + 1
 
-    jres['r'] = r
-    jres['evecr'] = jres['evec'][:, :r]
+    jres['count_cointegration_vectors'] = count_cointegration_vectors
+    jres['cointegration_vectors'] = jres['eigen_vectors'][:, :count_cointegration_vectors]
 
     return jres
 

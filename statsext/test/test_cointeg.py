@@ -62,10 +62,10 @@ class TestCointegration(unittest.TestCase):
         y = pandas.DataFrame(index=index, data={'col1': x_1t, 'col2': x_2t, 'col3': x_3t})
         p = 1
         jres = cointeg.get_johansen(y, p)
-        self.assertEquals(2, jres['r'], 'number of cointegration vectors does not match')
-        v1 = jres['evecr'][:, 0]
-        v2 = jres['evecr'][:, 1]
-        v3 = jres['evec'][:, 2]  # v3 is not a cointegration vector
+        self.assertEquals(2, jres['count_cointegration_vectors'], 'number of cointegration vectors does not match')
+        v1 = jres['cointegration_vectors'][:, 0]
+        v2 = jres['cointegration_vectors'][:, 1]
+        v3 = jres['eigen_vectors'][:, 2]  # v3 is not a cointegration vector
         expected_v1 = numpy.array([1.18712515, -2.37415904, 3.14587243])
         numpy.testing.assert_almost_equal(v1, expected_v1)
         expected_v2 = numpy.array([-0.76082907, 1.52149628, -0.32817785])

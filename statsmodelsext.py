@@ -26,11 +26,11 @@ if __name__ == '__main__':
     print cointeg.is_cointegrated(x_3t)
     p = 1
     jres = cointeg.get_johansen(y, p)
-    print "There are ", jres['r'], "cointegration vectors"
-    v1 = jres['evecr'][:, 0]
-    v2 = jres['evecr'][:, 1]
+    print "There are ", jres['count_cointegration_vectors'], "cointegration vectors"
+    v1 = jres['cointegration_vectors'][:, 0]
+    v2 = jres['cointegration_vectors'][:, 1]
     print v1
     print v2
-    v3 = jres['evec'][:, 2]  # v3 is not a cointegration vector
+    v3 = jres['eigen_vectors'][:, 2]  # v3 is not a cointegration vector
     print v1 / -v1[1]
     print v2 / -v2[1]
