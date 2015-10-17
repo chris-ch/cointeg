@@ -118,19 +118,19 @@ _TCJP2 = numpy.array([
 def c_sjt(dim_index, axis):
     if axis > 1 or axis < -1:
         jc = numpy.zeros(3)
-        
+
     elif dim_index > 12 or dim_index < 1:
         jc = numpy.zeros(3)
-        
+
     elif axis == -1:
         jc = _TCJP0[dim_index - 1, :]
-        
+
     elif axis == 0:
         jc = _TCJP1[dim_index - 1, :]
-        
+
     elif axis == 1:
         jc = _TCJP2[dim_index - 1, :]
-        
+
     else:
         raise ValueError('invalid axis')
 
@@ -161,7 +161,7 @@ def c_sja(dim_index, axis):
 def trimr(x, front, end):
     if end > 0:
         return x[front:-end]
-    
+
     else:
         return x[front:]
 
@@ -218,7 +218,6 @@ def cointegration_johansen(input_df, axis, lag=1):
     sk0 = numpy.dot(rkt.T, r0t) / count_rows(rkt)
     s00 = numpy.dot(r0t.T, r0t) / count_rows(r0t)
     sig = numpy.dot(sk0, numpy.dot(linalg.inv(s00), sk0.T))
-
     eigenvalues, eigenvectors = linalg.eig(numpy.dot(linalg.inv(skk), sig))
 
     # normalizing the eigenvectors such that (du'skk*du) = I
@@ -254,7 +253,7 @@ def cointegration_johansen(input_df, axis, lag=1):
     result['eigenvalue_statistics'] = eigenvalue_statistics  # maximum eigenvalue statistic
     result['critical_values'] = critical_values
     result['cvm'] = cvm
-    result['ind'] = order_decreasing
+    result['order_decreasing'] = order_decreasing  # indices of eigenvalues in decreasing order
     return result
 
 
