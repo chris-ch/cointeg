@@ -115,24 +115,45 @@ _TCJP2 = numpy.array([
 ])
 
 
-def c_sjt(n, p):
-    if p > 1 or p < -1:
+def c_sjt(dim_index, axis):
+    if axis > 1 or axis < -1:
         jc = numpy.zeros(3)
         
-    elif n > 12 or n < 1:
+    elif dim_index > 12 or dim_index < 1:
         jc = numpy.zeros(3)
         
-    elif p == -1:
-        jc = _TCJP0[n - 1, :]
+    elif axis == -1:
+        jc = _TCJP0[dim_index - 1, :]
         
-    elif p == 0:
-        jc = _TCJP1[n - 1, :]
+    elif axis == 0:
+        jc = _TCJP1[dim_index - 1, :]
         
-    elif p == 1:
-        jc = _TCJP2[n - 1, :]
+    elif axis == 1:
+        jc = _TCJP2[dim_index - 1, :]
         
     else:
-        raise ValueError('invalid p')
+        raise ValueError('invalid axis')
+
+    return jc
+
+
+def c_sja(dim_index, axis):
+    """
+    """
+    if axis > 1 or axis < -1:
+        jc = numpy.zeros(3)
+
+    elif dim_index > 12 or dim_index < 1:
+        jc = numpy.zeros(3)
+
+    elif axis == -1:
+        jc = _ECJP0[dim_index - 1, :]
+
+    elif axis == 0:
+        jc = _ECJP1[dim_index - 1, :]
+
+    elif axis == 1:
+        jc = _ECJP2[dim_index - 1, :]
 
     return jc
 
@@ -149,12 +170,7 @@ def resid(y, x):
     if x.size == 0:
         return y
 
-    try:
-        r = y - numpy.dot(x, numpy.dot(numpy.linalg.pinv(x), y))
-
-    except:
-        return None
-
+    r = y - numpy.dot(x, numpy.dot(numpy.linalg.pinv(x), y))
     return r
 
 
@@ -164,27 +180,6 @@ def shift(x, lag):
 
 def count_rows(x):
     return x.shape[0]
-
-
-def c_sja(n, p):
-    """
-    """
-    if p > 1 or p < -1:
-        jc = numpy.zeros(3)
-
-    elif n > 12 or n < 1:
-        jc = numpy.zeros(3)
-
-    elif p == -1:
-        jc = _ECJP0[n - 1, :]
-
-    elif p == 0:
-        jc = _ECJP1[n - 1, :]
-
-    elif p == 1:
-        jc = _ECJP2[n - 1, :]
-
-    return jc
 
 
 def cointegration_johansen(input_df, axis, lag=1):
@@ -206,15 +201,15 @@ def cointegration_johansen(input_df, axis, lag=1):
     input_df = detrend(input_df, key='default', axis=axis)
     diff_input_df = numpy.diff(input_df, 1, axis=0)
     z = tsat.lagmat(diff_input_df, lag)
-    z = trimr(z, lag, 0)
+    z = trimr(z, front=lag, end=0)
     z = detrend(z, key='default', axis=f)
-    diff_input_df = trimr(diff_input_df, lag, 0)
+    diff_input_df = trimr(diff_input_df, front=lag, end=0)
     diff_input_df = detrend(diff_input_df, key='default', axis=f)
     r0t = resid(diff_input_df, z)  # diff on lagged diffs
     lx = shift(input_df, lag)
-    lx = trimr(lx, 1, 0)
+    lx = trimr(lx, front=1, end=0)
     diff_input_df = detrend(lx, key='default', axis=f)
-    rkt = resid(diff_input_df, z)  # level on lagged diffs
+    rkt = resid(diff_input_df, z)
 
     if rkt is None:
         return None
