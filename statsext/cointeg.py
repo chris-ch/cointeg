@@ -1,6 +1,6 @@
 import numpy
 from matplotlib.mlab import detrend
-import statsmodels.tsa.tsatools as tsat
+from statsmodels.tsa import tsatools
 from numpy import linalg
 from statsmodels.tsa.stattools import adfuller
 
@@ -116,10 +116,11 @@ _TCJP2 = numpy.array([
 
 
 def c_sjt(dim_index, axis):
-    if axis > 1 or axis < -1:
+    jc = None
+    if axis < -1 or axis > 1:
         jc = numpy.zeros(3)
 
-    elif dim_index > 12 or dim_index < 1:
+    elif dim_index < 1 or dim_index > 12:
         jc = numpy.zeros(3)
 
     elif axis == -1:
@@ -130,9 +131,6 @@ def c_sjt(dim_index, axis):
 
     elif axis == 1:
         jc = _TCJP2[dim_index - 1, :]
-
-    else:
-        raise ValueError('invalid axis')
 
     return jc
 
@@ -200,7 +198,7 @@ def cointegration_johansen(input_df, axis, lag=1):
 
     input_df = detrend(input_df, key='default', axis=axis)
     diff_input_df = numpy.diff(input_df, 1, axis=0)
-    z = tsat.lagmat(diff_input_df, lag)
+    z = tsatools.lagmat(diff_input_df, lag)
     z = trimr(z, front=lag, end=0)
     z = detrend(z, key='default', axis=f)
     diff_input_df = trimr(diff_input_df, front=lag, end=0)
