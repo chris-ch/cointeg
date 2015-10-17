@@ -1,7 +1,7 @@
 import numpy
 from matplotlib.mlab import detrend
 import statsmodels.tsa.tsatools as tsat
-from numpy.linalg import inv, eig, cholesky as chol
+from numpy import linalg
 from statsmodels.tsa.stattools import adfuller
 
 __author__ = 'Christophe'
@@ -171,42 +171,50 @@ def c_sja(n, p):
     """
     if p > 1 or p < -1:
         jc = numpy.zeros(3)
+
     elif n > 12 or n < 1:
         jc = numpy.zeros(3)
+
     elif p == -1:
         jc = _ECJP0[n - 1, :]
+
     elif p == 0:
         jc = _ECJP1[n - 1, :]
+
     elif p == 1:
         jc = _ECJP2[n - 1, :]
 
     return jc
 
 
-def cointegration_johansen(input_df, p, lag):
+def cointegration_johansen(input_df, axis, lag=1):
     """
+
+    :param input_df: the input vectors as a pandas.DataFrame instance
+    :param axis: the axis for detrending data (-1 is the last axis)
+    :param lag: lag level
+    :return: returns test statistics data
     """
     count_samples, count_dimensions = input_df.shape
 
-    # why this?  f is detrend transformed series, p is detrend data
-    if p > -1:
+    # why this?  f is detrend transformed series, axis is detrend data
+    if axis > -1:
         f = 0
     else:
-        f = p
+        f = axis
 
-    input_df = detrend(input_df, 'default', p)
-    dx = numpy.diff(input_df, 1, axis=0)
-    z = tsat.lagmat(dx, lag)  # [k-1:]
+    input_df = detrend(input_df, key='default', axis=axis)
+    diff_input_df = numpy.diff(input_df, 1, axis=0)
+    z = tsat.lagmat(diff_input_df, lag)
     z = trimr(z, lag, 0)
-    z = detrend(z, 'default', f)
-    dx = trimr(dx, lag, 0)
-
-    dx = detrend(dx, 'default', f)
-    r0t = resid(dx, z)  # diff on lagged diffs
+    z = detrend(z, key='default', axis=f)
+    diff_input_df = trimr(diff_input_df, lag, 0)
+    diff_input_df = detrend(diff_input_df, key='default', axis=f)
+    r0t = resid(diff_input_df, z)  # diff on lagged diffs
     lx = shift(input_df, lag)
     lx = trimr(lx, 1, 0)
-    dx = detrend(lx, 'default', f)
-    rkt = resid(dx, z)  # level on lagged diffs
+    diff_input_df = detrend(lx, key='default', axis=f)
+    rkt = resid(diff_input_df, z)  # level on lagged diffs
 
     if rkt is None:
         return None
@@ -214,78 +222,44 @@ def cointegration_johansen(input_df, p, lag):
     skk = numpy.dot(rkt.T, rkt) / count_rows(rkt)
     sk0 = numpy.dot(rkt.T, r0t) / count_rows(rkt)
     s00 = numpy.dot(r0t.T, r0t) / count_rows(r0t)
-    sig = numpy.dot(sk0, numpy.dot(inv(s00), sk0.T))
+    sig = numpy.dot(sk0, numpy.dot(linalg.inv(s00), sk0.T))
 
-    tmp = inv(skk)
+    eigenvalues, eigenvectors = linalg.eig(numpy.dot(linalg.inv(skk), sig))
 
-    eigen_values, du = eig(numpy.dot(tmp, sig))  # au is eval, du is evec
+    # normalizing the eigenvectors such that (du'skk*du) = I
+    temp = linalg.inv(linalg.cholesky(numpy.dot(eigenvectors.T, numpy.dot(skk, eigenvectors))))
+    dt = numpy.dot(eigenvectors, temp)
 
-    # % Normalize the eigen vectors such that (du'skk*du) = I
-    temp = inv(chol(numpy.dot(du.T, numpy.dot(skk, du))))
+    # sorting eigenvalues and vectors
+    order_decreasing = numpy.flipud(numpy.argsort(eigenvalues))
+    sorted_eigenvalues = eigenvalues[order_decreasing]
+    sorted_eigenvectors = dt[:, order_decreasing]
 
-    dt = numpy.dot(du, temp)
-
-    # JP: the next part can be done much  easier
-
-    # %      NOTE: At this point, the eigenvectors are aligned by column. To
-    # %            physically move the column elements using the MATLAB sort,
-    # %            take the transpose to put the eigenvectors across the row
-
-    # % sort eigenvalues and vectors
-
-    auind = numpy.argsort(eigen_values)
-    aind = numpy.flipud(auind)
-    a = eigen_values[aind]
-    eigen_vectors = dt[:, aind]
-
-    # %NOTE: The eigenvectors have been sorted by row based on auind and moved to array "d".
-    # %      Put the eigenvectors back in column format after the sort by taking the
-    # %      transpose of "d". Since the eigenvectors have been physically moved, there is
-    # %      no need for aind at all. To preserve existing programming, aind is reset back to
-    # %      1, 2, 3, ....
-
-    # %EXPLANATION:  The MATLAB sort function sorts from low to high. The flip realigns
-    # %auind to go from the largest to the smallest eigenvalue (now aind). The original procedure
-    # %physically moved the rows of dt (to d) based on the alignment in aind and then used
-    # %aind as a column index to address the eigenvectors from high to low. This is a double
-    # %sort. If you wanted to extract the eigenvector corresponding to the largest eigenvalue by,
-    # %using aind as a reference, you would get the correct eigenvector, but with sorted
-    # %coefficients and, therefore, any follow-on calculation would seem to be in error.
-    # %If alternative programming methods are used to evaluate the eigenvalues, e.g. Frame method
-    # %followed by a root extraction on the characteristic equation, then the roots can be
-    # %quickly sorted. One by one, the corresponding eigenvectors can be generated. The resultant
-    # %array can be operated on using the Cholesky transformation, which enables a unit
-    # %diagonalization of skk. But nowhere along the way are the coefficients within the
-    # %eigenvector array ever changed. The final value of the "beta" array using either method
-    # %should be the same.
-
-    # % Compute the trace and max eigenvalue statistics */
+    # computing the trace and max eigenvalue statistics
     trace_statistics = numpy.zeros(count_dimensions)
-    lr2 = numpy.zeros(count_dimensions)
+    eigenvalue_statistics = numpy.zeros(count_dimensions)
     cvm = numpy.zeros((count_dimensions, 3))
     critical_values = numpy.zeros((count_dimensions, 3))
     iota = numpy.ones(count_dimensions)
     t, junk = rkt.shape
     for i in range(0, count_dimensions):
-        tmp = trimr(numpy.log(iota - a), i, 0)
+        tmp = trimr(numpy.log(iota - sorted_eigenvalues), i, 0)
         trace_statistics[i] = -t * numpy.sum(tmp, 0)
-        lr2[i] = -t * numpy.log(1 - a[i])
-        cvm[i, :] = c_sja(count_dimensions - i, p)
-        critical_values[i, :] = c_sjt(count_dimensions - i, p)
-        aind[i] = i
+        eigenvalue_statistics[i] = -t * numpy.log(1 - sorted_eigenvalues[i])
+        cvm[i, :] = c_sja(count_dimensions - i, axis)
+        critical_values[i, :] = c_sjt(count_dimensions - i, axis)
+        order_decreasing[i] = i
 
     result = dict()
     result['rkt'] = rkt
     result['r0t'] = r0t
-    result['eig'] = a
-    result['eigen_vectors'] = eigen_vectors
-    result['trace_statistic'] = trace_statistics
-    result['lr2'] = lr2
+    result['eigenvalues'] = sorted_eigenvalues
+    result['eigenvectors'] = sorted_eigenvectors
+    result['trace_statistic'] = trace_statistics  # likelihood ratio trace statistic
+    result['eigenvalue_statistics'] = eigenvalue_statistics  # maximum eigenvalue statistic
     result['critical_values'] = critical_values
     result['cvm'] = cvm
-    result['ind'] = aind
-    result['method'] = 'johansen'
-
+    result['ind'] = order_decreasing
     return result
 
 
@@ -304,7 +278,7 @@ def get_johansen(y, lag=1):
             count_cointegration_vectors = i + 1
 
     test_results['count_cointegration_vectors'] = count_cointegration_vectors
-    test_results['cointegration_vectors'] = test_results['eigen_vectors'][:, :count_cointegration_vectors]
+    test_results['cointegration_vectors'] = test_results['eigenvectors'][:, :count_cointegration_vectors]
 
     return test_results
 

@@ -30,6 +30,6 @@ if __name__ == '__main__':
     v2 = jres['cointegration_vectors'][:, 1]
     print v1
     print v2
-    v3 = jres['eigen_vectors'][:, 2]  # v3 is not a cointegration vector
+    v3 = jres['eigenvectors'][:, 2]  # v3 is not a cointegration vector
     print v1 / -v1[1]
     print v2 / -v2[1]
