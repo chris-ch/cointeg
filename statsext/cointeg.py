@@ -7,8 +7,8 @@ from statsmodels.tsa.stattools import adfuller
 __author__ = 'Christophe'
 
 
-def is_cointegrated(v, significance='5%', max_d=6, reg='nc', autolag='AIC'):
-    """ Augmented Dickey Fuller test
+def is_not_stationary(v, significance='5%', max_d=6, reg='nc', autolag='AIC'):
+    """ Augmented Dickey Fuller test for a unit root in a univariate process in the presence of serial correlation.
 
     Parameters
     ----------
@@ -115,7 +115,13 @@ _TCJP2 = numpy.array([
 ])
 
 
-def c_sjt(dim_index, axis):
+def critical_values_trace(dim_index, axis):
+    """
+    Critical values for Johansen trace statistic.
+    :param dim_index:
+    :param axis:
+    :return:
+    """
     jc = None
     if axis < -1 or axis > 1:
         jc = numpy.zeros(3)
@@ -135,13 +141,15 @@ def c_sjt(dim_index, axis):
     return jc
 
 
-def c_sja(dim_index, axis):
+def critical_values_max_eigenvalue(dim_index, axis):
     """
+    Critical values for Johansen maximum eigenvalue statistic.
     """
-    if axis > 1 or axis < -1:
+    jc = None
+    if axis < -1 or axis > 1:
         jc = numpy.zeros(3)
 
-    elif dim_index > 12 or dim_index < 1:
+    elif dim_index < 1 or dim_index > 12:
         jc = numpy.zeros(3)
 
     elif axis == -1:
@@ -180,23 +188,24 @@ def count_rows(x):
     return x.shape[0]
 
 
-def cointegration_johansen(input_df, axis, lag=1):
+def cointegration_johansen(input_df, trend_order, lag=1):
     """
+    For axis: -1 means no deterministic part, 0 means constant term, 1 means constant plus time-trend,
+    > 1 means higher order polynomial.
 
     :param input_df: the input vectors as a pandas.DataFrame instance
-    :param axis: the axis for detrending data (-1 is the last axis)
-    :param lag: lag level
+    :param trend_order: order of time polynomial in the null-hypothesis
+    :param lag: number of lagged difference terms used when computing the estimator
     :return: returns test statistics data
     """
     count_samples, count_dimensions = input_df.shape
-
-    # why this?  f is detrend transformed series, axis is detrend data
-    if axis > -1:
+    if trend_order > -1:
         f = 0
-    else:
-        f = axis
 
-    input_df = detrend(input_df, key='default', axis=axis)
+    else:
+        f = trend_order
+
+    input_df = detrend(input_df, key='default', axis=trend_order)
     diff_input_df = numpy.diff(input_df, 1, axis=0)
     z = tsatools.lagmat(diff_input_df, lag)
     z = trimr(z, front=lag, end=0)
@@ -238,8 +247,8 @@ def cointegration_johansen(input_df, axis, lag=1):
         tmp = trimr(numpy.log(iota - sorted_eigenvalues), i, 0)
         trace_statistics[i] = -t * numpy.sum(tmp, 0)
         eigenvalue_statistics[i] = -t * numpy.log(1 - sorted_eigenvalues[i])
-        cvm[i, :] = c_sja(count_dimensions - i, axis)
-        critical_values[i, :] = c_sjt(count_dimensions - i, axis)
+        cvm[i, :] = critical_values_max_eigenvalue(count_dimensions - i, trend_order)
+        critical_values[i, :] = critical_values_trace(count_dimensions - i, trend_order)
         order_decreasing[i] = i
 
     result = dict()

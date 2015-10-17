@@ -44,9 +44,9 @@ class TestCointegration(unittest.TestCase):
         x_1t = numpy.cumsum(s1) + s2
         x_2t = a * numpy.cumsum(s1) + s3
         x_3t = 100. * s3
-        self.assertTrue(cointeg.is_cointegrated(x_1t))
-        self.assertTrue(cointeg.is_cointegrated(x_2t))
-        self.assertFalse(cointeg.is_cointegrated(x_3t))
+        self.assertTrue(cointeg.is_not_stationary(x_1t))
+        self.assertTrue(cointeg.is_not_stationary(x_2t))
+        self.assertFalse(cointeg.is_not_stationary(x_3t))
         
     def test_johansen(self):
         s1 = self.load_resource('s1.pickle')
@@ -71,6 +71,9 @@ class TestCointegration(unittest.TestCase):
         numpy.testing.assert_almost_equal(v2, expected_v2)
         expected_v3 = numpy.array([0.00019993, 0.04721915, -0.04629564])
         numpy.testing.assert_almost_equal(v3, expected_v3)
+        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v1), significance='10%'))
+        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v2), significance='10%'))
+        self.assertTrue(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v3), significance='5%'))
     
 if __name__ == '__main__':
     unittest.main()

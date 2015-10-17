@@ -19,11 +19,11 @@ if __name__ == '__main__':
     todays_date = datetime.datetime.now().date()
     index = pd.date_range(todays_date - datetime.timedelta(10), periods=n, freq='D')
     y = pd.DataFrame(index=index, data={'col1': x_1t, 'col2': x_2t, 'col3': x_3t})
-    print cointeg.is_cointegrated(x_1t)
-    print cointeg.is_cointegrated(np.diff(x_1t))
-    print cointeg.is_cointegrated(x_2t)
-    print cointeg.is_cointegrated(np.diff(x_2t))
-    print cointeg.is_cointegrated(x_3t)
+    print cointeg.is_not_stationary(x_1t)
+    print cointeg.is_not_stationary(np.diff(x_1t))
+    print cointeg.is_not_stationary(x_2t)
+    print cointeg.is_not_stationary(np.diff(x_2t))
+    print cointeg.is_not_stationary(x_3t)
     jres = cointeg.get_johansen(y, lag=1)
     print "There are ", jres['count_cointegration_vectors'], "cointegration vectors"
     v1 = jres['cointegration_vectors'][:, 0]
