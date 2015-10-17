@@ -24,8 +24,7 @@ if __name__ == '__main__':
     print cointeg.is_cointegrated(x_2t)
     print cointeg.is_cointegrated(np.diff(x_2t))
     print cointeg.is_cointegrated(x_3t)
-    p = 1
-    jres = cointeg.get_johansen(y, p)
+    jres = cointeg.get_johansen(y, lag=1)
     print "There are ", jres['count_cointegration_vectors'], "cointegration vectors"
     v1 = jres['cointegration_vectors'][:, 0]
     v2 = jres['cointegration_vectors'][:, 1]

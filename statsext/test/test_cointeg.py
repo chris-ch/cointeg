@@ -60,8 +60,7 @@ class TestCointegration(unittest.TestCase):
         n = len(s1)
         index = pandas.date_range(test_date - timedelta(10), periods=n, freq='D')
         y = pandas.DataFrame(index=index, data={'col1': x_1t, 'col2': x_2t, 'col3': x_3t})
-        p = 1
-        jres = cointeg.get_johansen(y, p)
+        jres = cointeg.get_johansen(y, lag=1)
         self.assertEquals(2, jres['count_cointegration_vectors'], 'number of cointegration vectors does not match')
         v1 = jres['cointegration_vectors'][:, 0]
         v2 = jres['cointegration_vectors'][:, 1]

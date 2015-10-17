@@ -1,6 +1,4 @@
-import datetime
-import numpy as np
-import pandas as pd
+import numpy
 from matplotlib.mlab import detrend
 import statsmodels.tsa.tsatools as tsat
 from numpy.linalg import inv, eig, cholesky as chol
@@ -26,7 +24,7 @@ def is_cointegrated(v, significance='5%', max_d=6, reg='nc', autolag='AIC'):
     return adf[0] >= adf[4][significance]
 
 
-_ECJP0 = np.array([
+_ECJP0 = numpy.array([
     [2.9762, 4.1296, 6.9406],
     [9.4748, 11.2246, 15.0923],
     [15.7175, 17.7961, 22.2519],
@@ -41,7 +39,7 @@ _ECJP0 = np.array([
     [69.6513, 73.0946, 80.0937],
 ])
 
-_ECJP1 = np.array([
+_ECJP1 = numpy.array([
     [2.7055, 3.8415, 6.6349],
     [12.2971, 14.2639, 18.5200],
     [18.8928, 21.1314, 25.8650],
@@ -56,7 +54,7 @@ _ECJP1 = np.array([
     [73.0563, 76.5734, 83.7105],
 ])
 
-_ECJP2 = np.array([
+_ECJP2 = numpy.array([
     [2.7055, 3.8415, 6.6349],
     [15.0006, 17.1481, 21.7465],
     [21.8731, 24.2522, 29.2631],
@@ -71,7 +69,7 @@ _ECJP2 = np.array([
     [76.4081, 79.9878, 87.2395],
 ])
 
-_TCJP0 = np.array([
+_TCJP0 = numpy.array([
     [2.9762, 4.1296, 6.9406],
     [10.4741, 12.3212, 16.3640],
     [21.7781, 24.2761, 29.5147],
@@ -86,7 +84,7 @@ _TCJP0 = np.array([
     [302.9054, 311.1288, 326.9716],
 ])
 
-_TCJP1 = np.array([
+_TCJP1 = numpy.array([
     [2.7055, 3.8415, 6.6349],
     [13.4294, 15.4943, 19.9349],
     [27.0669, 29.7961, 35.4628],
@@ -101,7 +99,7 @@ _TCJP1 = np.array([
     [326.5354, 334.9795, 351.2150],
 ])
 
-_TCJP2 = np.array([
+_TCJP2 = numpy.array([
     [2.7055, 3.8415, 6.6349],
     [16.1619, 18.3985, 23.1485],
     [32.0645, 35.0116, 41.0815],
@@ -119,15 +117,20 @@ _TCJP2 = np.array([
 
 def c_sjt(n, p):
     if p > 1 or p < -1:
-        jc = np.zeros(3)
+        jc = numpy.zeros(3)
+        
     elif n > 12 or n < 1:
-        jc = np.zeros(3)
+        jc = numpy.zeros(3)
+        
     elif p == -1:
         jc = _TCJP0[n - 1, :]
+        
     elif p == 0:
         jc = _TCJP1[n - 1, :]
+        
     elif p == 1:
         jc = _TCJP2[n - 1, :]
+        
     else:
         raise ValueError('invalid p')
 
@@ -137,6 +140,7 @@ def c_sjt(n, p):
 def trimr(x, front, end):
     if end > 0:
         return x[front:-end]
+    
     else:
         return x[front:]
 
@@ -144,26 +148,31 @@ def trimr(x, front, end):
 def resid(y, x):
     if x.size == 0:
         return y
+
     try:
-        r = y - np.dot(x, np.dot(np.linalg.pinv(x), y))
+        r = y - numpy.dot(x, numpy.dot(numpy.linalg.pinv(x), y))
+
     except:
         return None
+
     return r
 
 
-def lag(x, lag):
+def shift(x, lag):
     return x[:-lag]
 
 
-def rows(x):
+def count_rows(x):
     return x.shape[0]
 
 
 def c_sja(n, p):
+    """
+    """
     if p > 1 or p < -1:
-        jc = np.zeros(3)
+        jc = numpy.zeros(3)
     elif n > 12 or n < 1:
-        jc = np.zeros(3)
+        jc = numpy.zeros(3)
     elif p == -1:
         jc = _ECJP0[n - 1, :]
     elif p == 0:
@@ -174,8 +183,10 @@ def c_sja(n, p):
     return jc
 
 
-def coint_johansen(x, p, k):
-    nobs, m = x.shape
+def cointegration_johansen(input_df, p, lag):
+    """
+    """
+    count_samples, count_dimensions = input_df.shape
 
     # why this?  f is detrend transformed series, p is detrend data
     if p > -1:
@@ -183,16 +194,16 @@ def coint_johansen(x, p, k):
     else:
         f = p
 
-    x = detrend(x, 'default', p)
-    dx = np.diff(x, 1, axis=0)
-    z = tsat.lagmat(dx, k)  # [k-1:]
-    z = trimr(z, k, 0)
+    input_df = detrend(input_df, 'default', p)
+    dx = numpy.diff(input_df, 1, axis=0)
+    z = tsat.lagmat(dx, lag)  # [k-1:]
+    z = trimr(z, lag, 0)
     z = detrend(z, 'default', f)
-    dx = trimr(dx, k, 0)
+    dx = trimr(dx, lag, 0)
 
     dx = detrend(dx, 'default', f)
     r0t = resid(dx, z)  # diff on lagged diffs
-    lx = lag(x, k)
+    lx = shift(input_df, lag)
     lx = trimr(lx, 1, 0)
     dx = detrend(lx, 'default', f)
     rkt = resid(dx, z)  # level on lagged diffs
@@ -200,19 +211,19 @@ def coint_johansen(x, p, k):
     if rkt is None:
         return None
 
-    skk = np.dot(rkt.T, rkt) / rows(rkt)
-    sk0 = np.dot(rkt.T, r0t) / rows(rkt)
-    s00 = np.dot(r0t.T, r0t) / rows(r0t)
-    sig = np.dot(sk0, np.dot(inv(s00), (sk0.T)))
+    skk = numpy.dot(rkt.T, rkt) / count_rows(rkt)
+    sk0 = numpy.dot(rkt.T, r0t) / count_rows(rkt)
+    s00 = numpy.dot(r0t.T, r0t) / count_rows(r0t)
+    sig = numpy.dot(sk0, numpy.dot(inv(s00), sk0.T))
 
     tmp = inv(skk)
 
-    au, du = eig(np.dot(tmp, sig))  # au is eval, du is evec
+    eigen_values, du = eig(numpy.dot(tmp, sig))  # au is eval, du is evec
 
     # % Normalize the eigen vectors such that (du'skk*du) = I
-    temp = inv(chol(np.dot(du.T, np.dot(skk, du))))
+    temp = inv(chol(numpy.dot(du.T, numpy.dot(skk, du))))
 
-    dt = np.dot(du, temp)
+    dt = numpy.dot(du, temp)
 
     # JP: the next part can be done much  easier
 
@@ -222,10 +233,10 @@ def coint_johansen(x, p, k):
 
     # % sort eigenvalues and vectors
 
-    auind = np.argsort(au)
-    aind = np.flipud(auind)
-    a = au[aind]
-    d = dt[:, aind]
+    auind = numpy.argsort(eigen_values)
+    aind = numpy.flipud(auind)
+    a = eigen_values[aind]
+    eigen_vectors = dt[:, aind]
 
     # %NOTE: The eigenvectors have been sorted by row based on auind and moved to array "d".
     # %      Put the eigenvectors back in column format after the sort by taking the
@@ -249,30 +260,28 @@ def coint_johansen(x, p, k):
     # %should be the same.
 
     # % Compute the trace and max eigenvalue statistics */
-    lr1 = np.zeros(m)
-    lr2 = np.zeros(m)
-    cvm = np.zeros((m, 3))
-    cvt = np.zeros((m, 3))
-    iota = np.ones(m)
+    trace_statistics = numpy.zeros(count_dimensions)
+    lr2 = numpy.zeros(count_dimensions)
+    cvm = numpy.zeros((count_dimensions, 3))
+    critical_values = numpy.zeros((count_dimensions, 3))
+    iota = numpy.ones(count_dimensions)
     t, junk = rkt.shape
-    for i in range(0, m):
-        tmp = trimr(np.log(iota - a), i, 0)
-        lr1[i] = -t * np.sum(tmp, 0)
-        lr2[i] = -t * np.log(1 - a[i])
-        cvm[i, :] = c_sja(m - i, p)
-        cvt[i, :] = c_sjt(m - i, p)
+    for i in range(0, count_dimensions):
+        tmp = trimr(numpy.log(iota - a), i, 0)
+        trace_statistics[i] = -t * numpy.sum(tmp, 0)
+        lr2[i] = -t * numpy.log(1 - a[i])
+        cvm[i, :] = c_sja(count_dimensions - i, p)
+        critical_values[i, :] = c_sjt(count_dimensions - i, p)
         aind[i] = i
 
     result = dict()
-    # % set up results structure
-    # estimation results, residuals
     result['rkt'] = rkt
     result['r0t'] = r0t
     result['eig'] = a
-    result['eigen_vectors'] = d
-    result['trace_statistic'] = lr1
+    result['eigen_vectors'] = eigen_vectors
+    result['trace_statistic'] = trace_statistics
     result['lr2'] = lr2
-    result['critical_values'] = cvt
+    result['critical_values'] = critical_values
     result['cvm'] = cvm
     result['ind'] = aind
     result['method'] = 'johansen'
@@ -280,23 +289,22 @@ def coint_johansen(x, p, k):
     return result
 
 
-def get_johansen(y, p):
+def get_johansen(y, lag=1):
     """
     Get the cointegration vectors at 95% level of significance
     given by the trace statistic test.
     """
-
-    n, l = y.shape
-    jres = coint_johansen(y, 0, p)
-    trace_statistic = jres['trace_statistic']  # trace statistic
-    critical_values = jres['critical_values']
+    count_samples, count_dimensions = y.shape
+    test_results = cointegration_johansen(y, 0, lag=lag)
+    trace_statistic = test_results['trace_statistic']  # trace statistic
+    critical_values = test_results['critical_values']
     count_cointegration_vectors = 0
-    for i in range(l):
+    for i in range(count_dimensions):
         if trace_statistic[i] > critical_values[i, 1]:  # 0: 90%  1:95% 2: 99%
             count_cointegration_vectors = i + 1
 
-    jres['count_cointegration_vectors'] = count_cointegration_vectors
-    jres['cointegration_vectors'] = jres['eigen_vectors'][:, :count_cointegration_vectors]
+    test_results['count_cointegration_vectors'] = count_cointegration_vectors
+    test_results['cointegration_vectors'] = test_results['eigen_vectors'][:, :count_cointegration_vectors]
 
-    return jres
+    return test_results
 
