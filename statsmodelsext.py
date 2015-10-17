@@ -5,7 +5,6 @@ from statsext import cointeg
 
 __author__ = 'Christophe'
 
-
 if __name__ == '__main__':
     mu, sigma = 0, 1  # mean and standard deviation
     n = 10000
@@ -20,11 +19,11 @@ if __name__ == '__main__':
     todays_date = datetime.datetime.now().date()
     index = pd.date_range(todays_date - datetime.timedelta(10), periods=n, freq='D')
     y = pd.DataFrame(index=index, data={'col1': x_1t, 'col2': x_2t, 'col3': x_3t})
-    print cointeg.ADF(x_1t)
-    print cointeg.ADF(np.diff(x_1t))
-    print cointeg.ADF(x_2t)
-    print cointeg.ADF(np.diff(x_2t))
-    print cointeg.ADF(x_3t)
+    print cointeg.is_cointegrated(x_1t)
+    print cointeg.is_cointegrated(np.diff(x_1t))
+    print cointeg.is_cointegrated(x_2t)
+    print cointeg.is_cointegrated(np.diff(x_2t))
+    print cointeg.is_cointegrated(x_3t)
     p = 1
     jres = cointeg.get_johansen(y, p)
     print "There are ", jres['r'], "cointegration vectors"

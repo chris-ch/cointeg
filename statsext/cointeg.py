@@ -26,7 +26,7 @@ def is_cointegrated(v, significance='5%', max_d=6, reg='nc', autolag='AIC'):
     return adf[0] >= adf[4][significance]
 
 
-ejcp0 = np.array([
+_ECJP0 = np.array([
     [2.9762, 4.1296, 6.9406],
     [9.4748, 11.2246, 15.0923],
     [15.7175, 17.7961, 22.2519],
@@ -41,7 +41,7 @@ ejcp0 = np.array([
     [69.6513, 73.0946, 80.0937],
 ])
 
-ejcp1 = np.array([
+_ECJP1 = np.array([
     [2.7055, 3.8415, 6.6349],
     [12.2971, 14.2639, 18.5200],
     [18.8928, 21.1314, 25.8650],
@@ -56,7 +56,7 @@ ejcp1 = np.array([
     [73.0563, 76.5734, 83.7105],
 ])
 
-ejcp2 = np.array([
+_ECJP2 = np.array([
     [2.7055, 3.8415, 6.6349],
     [15.0006, 17.1481, 21.7465],
     [21.8731, 24.2522, 29.2631],
@@ -71,7 +71,7 @@ ejcp2 = np.array([
     [76.4081, 79.9878, 87.2395],
 ])
 
-tjcp0 = np.array([
+_TCJP0 = np.array([
     [2.9762, 4.1296, 6.9406],
     [10.4741, 12.3212, 16.3640],
     [21.7781, 24.2761, 29.5147],
@@ -86,7 +86,7 @@ tjcp0 = np.array([
     [302.9054, 311.1288, 326.9716],
 ])
 
-tjcp1 = np.array([
+_TCJP1 = np.array([
     [2.7055, 3.8415, 6.6349],
     [13.4294, 15.4943, 19.9349],
     [27.0669, 29.7961, 35.4628],
@@ -101,7 +101,7 @@ tjcp1 = np.array([
     [326.5354, 334.9795, 351.2150],
 ])
 
-tjcp2 = np.array([
+_TCJP2 = np.array([
     [2.7055, 3.8415, 6.6349],
     [16.1619, 18.3985, 23.1485],
     [32.0645, 35.0116, 41.0815],
@@ -123,11 +123,11 @@ def c_sjt(n, p):
     elif n > 12 or n < 1:
         jc = np.zeros(3)
     elif p == -1:
-        jc = tjcp0[n - 1, :]
+        jc = _TCJP0[n - 1, :]
     elif p == 0:
-        jc = tjcp1[n - 1, :]
+        jc = _TCJP1[n - 1, :]
     elif p == 1:
-        jc = tjcp2[n - 1, :]
+        jc = _TCJP2[n - 1, :]
     else:
         raise ValueError('invalid p')
 
@@ -165,11 +165,11 @@ def c_sja(n, p):
     elif n > 12 or n < 1:
         jc = np.zeros(3)
     elif p == -1:
-        jc = ejcp0[n - 1, :]
+        jc = _ECJP0[n - 1, :]
     elif p == 0:
-        jc = ejcp1[n - 1, :]
+        jc = _ECJP1[n - 1, :]
     elif p == 1:
-        jc = ejcp2[n - 1, :]
+        jc = _ECJP2[n - 1, :]
 
     return jc
 
@@ -270,9 +270,9 @@ def coint_johansen(x, p, k):
     result['r0t'] = r0t
     result['eig'] = a
     result['evec'] = d  # transposed compared to matlab ?
-    result['lr1'] = lr1
+    result['trace_statistic'] = lr1
     result['lr2'] = lr2
-    result['cvt'] = cvt
+    result['critical_values'] = cvt
     result['cvm'] = cvm
     result['ind'] = aind
     result['meth'] = 'johansen'
@@ -286,13 +286,13 @@ def get_johansen(y, p):
     given by the trace statistic test.
     """
 
-    N, l = y.shape
+    n, l = y.shape
     jres = coint_johansen(y, 0, p)
-    trstat = jres['lr1']  # trace statistic
-    tsignf = jres['cvt']  # critical values
-
+    trace_statistic = jres['trace_statistic']  # trace statistic
+    critical_values = jres['critical_values']
+    r = 0
     for i in range(l):
-        if trstat[i] > tsignf[i, 1]:  # 0: 90%  1:95% 2: 99%
+        if trace_statistic[i] > critical_values[i, 1]:  # 0: 90%  1:95% 2: 99%
             r = i + 1
 
     jres['r'] = r
