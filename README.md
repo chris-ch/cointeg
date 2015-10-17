@@ -1,1 +1,1 @@
-# cointeg
+# cointeg - cointegration tools
