@@ -10,7 +10,7 @@ from matplotlib import pyplot
 __author__ = 'Christophe'
 
 _QUANDL_TOKEN = 'UvpzeSNabDxs3DKxggsi'  # Christophe private
-_CACHE_LOCATION = '.'
+_CACHE_LOCATION = '.quandl_cache'
 
 
 def load_quandl(datasets, trim_start=None):
@@ -22,6 +22,9 @@ def load_quandl(datasets, trim_start=None):
 
 
 def load_cache(datasets, trim_start=None):
+    if not os.path.isdir(os.path.abspath(_CACHE_LOCATION)):
+        os.makedirs(os.path.abspath(_CACHE_LOCATION))
+
     SUFFIX_CLOSE_ADJ = '11'
     datasets = ['.'.join([dataset, SUFFIX_CLOSE_ADJ]) for dataset in datasets]
     datasets_encoded = quote_plus('@'.join(datasets + ['trim_start=%s' % trim_start]))
