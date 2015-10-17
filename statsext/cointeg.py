@@ -115,7 +115,7 @@ _TCJP2 = numpy.array([
 ])
 
 
-def critical_values_trace(dim_index, axis):
+def get_critical_values_trace(dim_index, axis):
     """
     Critical values for Johansen trace statistic.
     :param dim_index:
@@ -141,7 +141,7 @@ def critical_values_trace(dim_index, axis):
     return jc
 
 
-def critical_values_max_eigenvalue(dim_index, axis):
+def get_critical_values_max_eigenvalue(dim_index, axis):
     """
     Critical values for Johansen maximum eigenvalue statistic.
     """
@@ -239,16 +239,16 @@ def cointegration_johansen(input_df, trend_order, lag=1):
     # computing the trace and max eigenvalue statistics
     trace_statistics = numpy.zeros(count_dimensions)
     eigenvalue_statistics = numpy.zeros(count_dimensions)
-    cvm = numpy.zeros((count_dimensions, 3))
-    critical_values = numpy.zeros((count_dimensions, 3))
+    critical_values_max_eigenvalue = numpy.zeros((count_dimensions, 3))
+    critical_values_trace = numpy.zeros((count_dimensions, 3))
     iota = numpy.ones(count_dimensions)
     t, junk = rkt.shape
     for i in range(0, count_dimensions):
         tmp = trimr(numpy.log(iota - sorted_eigenvalues), i, 0)
         trace_statistics[i] = -t * numpy.sum(tmp, 0)
         eigenvalue_statistics[i] = -t * numpy.log(1 - sorted_eigenvalues[i])
-        cvm[i, :] = critical_values_max_eigenvalue(count_dimensions - i, trend_order)
-        critical_values[i, :] = critical_values_trace(count_dimensions - i, trend_order)
+        critical_values_max_eigenvalue[i, :] = get_critical_values_max_eigenvalue(count_dimensions - i, trend_order)
+        critical_values_trace[i, :] = get_critical_values_trace(count_dimensions - i, trend_order)
         order_decreasing[i] = i
 
     result = dict()
@@ -258,13 +258,13 @@ def cointegration_johansen(input_df, trend_order, lag=1):
     result['eigenvectors'] = sorted_eigenvectors
     result['trace_statistic'] = trace_statistics  # likelihood ratio trace statistic
     result['eigenvalue_statistics'] = eigenvalue_statistics  # maximum eigenvalue statistic
-    result['critical_values'] = critical_values
-    result['cvm'] = cvm
+    result['critical_values_trace'] = critical_values_trace
+    result['critical_values_max_eigenvalue'] = critical_values_max_eigenvalue
     result['order_decreasing'] = order_decreasing  # indices of eigenvalues in decreasing order
     return result
 
 
-def get_johansen(y, lag=1):
+def get_johansen(y, lag=1, significance='95%'):
     """
     Get the cointegration vectors at 95% level of significance
     given by the trace statistic test.
@@ -272,10 +272,11 @@ def get_johansen(y, lag=1):
     count_samples, count_dimensions = y.shape
     test_results = cointegration_johansen(y, 0, lag=lag)
     trace_statistic = test_results['trace_statistic']  # trace statistic
-    critical_values = test_results['critical_values']
+    critical_values = test_results['critical_values_trace']
     count_cointegration_vectors = 0
+    significance_indices = {'90%': 0, '95%': 1, '99%': 2}
     for i in range(count_dimensions):
-        if trace_statistic[i] > critical_values[i, 1]:  # 0: 90%  1:95% 2: 99%
+        if trace_statistic[i] > critical_values[i, significance_indices[significance]]:
             count_cointegration_vectors = i + 1
 
     test_results['count_cointegration_vectors'] = count_cointegration_vectors
