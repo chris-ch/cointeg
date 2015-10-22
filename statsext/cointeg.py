@@ -269,18 +269,13 @@ def get_johansen(y, lag=1, significance='95%', trend_order=0):
     Get the cointegration vectors at 95% level of significance
     given by the trace statistic test.
     """
-    count_samples, count_dimensions = y.shape
     test_results = cointegration_johansen(y, trend_order=trend_order, lag=lag)
-    trace_statistic = test_results['trace_statistic']  # trace statistic
+    trace_statistic = test_results['trace_statistic']
     critical_values = test_results['critical_values_trace']
     count_cointegration_vectors = 0
     significance_indices = {'90%': 0, '95%': 1, '99%': 2}
-    for i in range(count_dimensions):
-        if trace_statistic[i] > critical_values[i, significance_indices[significance]]:
-            count_cointegration_vectors = i + 1
-
+    count_cointegration_vectors = sum(trace_statistic > critical_values[:, significance_indices[significance]])
     test_results['count_cointegration_vectors'] = count_cointegration_vectors
     test_results['cointegration_vectors'] = test_results['eigenvectors'][:, :count_cointegration_vectors]
-
     return test_results
 
