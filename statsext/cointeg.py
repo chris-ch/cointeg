@@ -264,13 +264,13 @@ def cointegration_johansen(input_df, trend_order, lag=1):
     return result
 
 
-def get_johansen(y, lag=1, significance='95%'):
+def get_johansen(y, lag=1, significance='95%', trend_order=0):
     """
     Get the cointegration vectors at 95% level of significance
     given by the trace statistic test.
     """
     count_samples, count_dimensions = y.shape
-    test_results = cointegration_johansen(y, 0, lag=lag)
+    test_results = cointegration_johansen(y, trend_order=trend_order, lag=lag)
     trace_statistic = test_results['trace_statistic']  # trace statistic
     critical_values = test_results['critical_values_trace']
     count_cointegration_vectors = 0
