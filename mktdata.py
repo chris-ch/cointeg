@@ -4,18 +4,23 @@ _CACHE_LOCATION = '.quandl_cache'
 
 
 import os
+import json
 import logging
 from urllib import quote_plus
 import pandas
 import Quandl
 
 
-def load_quandl(datasets, trim_start=None):
-    if trim_start:
-        return Quandl.get(datasets, trim_start=trim_start, authtoken=_QUANDL_TOKEN).dropna()
+def load_quandl(datasets):
+    dataset = None
+    sensitive_file = os.path.abspath('sensitive.json')
+    with open(sensitive_file) as sensitive_data:
+        json_data = json.load(sensitive_data)
+        logging.info('loaded sensitive data: %s', json_data)
+        quandl_token = json_data['quandl_token']
+        dataset = Quandl.get(datasets, authtoken=quandl_token).dropna()
 
-    else:
-        return Quandl.get(datasets, authtoken=_QUANDL_TOKEN).dropna()
+    return dataset
 
 
 def load_prices(datasets, start_date=None, end_date=None, field_selector='CLOSE'):
