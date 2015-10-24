@@ -6,14 +6,14 @@ from statsext import cointeg
 from matplotlib import pyplot
 from pandas.stats.api import ols
 
-from mktdata import load_prices
+from mktdata import load_prices_quandl
 
 __author__ = 'Christophe'
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     codes = ['GOOG/NYSE_EWA', 'GOOG/NYSE_EWC']
-    quandl_data = load_prices(codes, start_date='2006-04-26', end_date='2012-04-09')
+    quandl_data = load_prices_quandl(codes, start_date='2006-04-26', end_date='2012-04-09')
     results = cointeg.get_johansen(quandl_data, lag=1, significance='90%')
     print
     print 'critical_values_trace', results['critical_values_trace']
