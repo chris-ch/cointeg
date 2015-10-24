@@ -1,14 +1,11 @@
-
-_QUANDL_TOKEN = 'UvpzeSNabDxs3DKxggsi'  # Christophe private
-_CACHE_LOCATION = '.quandl_cache'
-
-
 import os
 import json
 import logging
 from urllib import quote_plus
 import pandas
 import Quandl
+
+_CACHE_LOCATION = '.quandl_cache'
 
 
 def load_quandl(datasets):
