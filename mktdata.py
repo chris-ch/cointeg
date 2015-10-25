@@ -1,20 +1,12 @@
 import os
 import json
 import logging
-import argparse
 from urllib import quote_plus
-import httplib2
-import oauth2client
-from apiclient import discovery
 import pandas
 import Quandl
 
-
 _SENSITIVE_FILE = 'sensitive.json'
 _CACHE_LOCATION = '.quandl_cache'
-
-_GOOGLE_CLIENT_SECRET = 'client_secret.json'
-_GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.readonly.metadata'
 
 
 def sensitive(key):
@@ -55,24 +47,3 @@ def load_prices_quandl(codes, start_date=None, end_date=None, field_selector='CL
         selected = filtered.loc[:, filtered.columns.str.upper().str.endswith(pattern)]
 
     return selected
-
-
-def load_prices_eoddata(codes):
-    if not os.path.isdir(os.path.abspath(_CACHE_LOCATION)):
-        os.makedirs(os.path.abspath(_CACHE_LOCATION))
-
-    store = oauth2client.file.Storage('credential_storage.json')
-    credentials = store.get()
-    if not credentials or credentials.invalid:
-        flow = oauth2client.client.flow_from_clientsecrets(_GOOGLE_CLIENT_SECRET, _GOOGLE_SCOPES)
-        flags = argparse.ArgumentParser(parents=[oauth2client.tools.argparser]).parse_args()
-        credentials = oauth2client.tools.run_flow(flow, store, flags=flags)
-
-    drive = discovery.build('drive', 'v2', http=credentials.authorize(httplib2.Http()))
-    files = drive.files().list().execute().get('items', [])
-    for f in files:
-        print f['title'], f['mimeType']
-
-
-if __name__ == '__main__':
-    load_prices_eoddata(['IBM'])
