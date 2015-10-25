@@ -1,5 +1,5 @@
 import numpy
-from matplotlib.mlab import detrend
+from scipy.signal import detrend
 from statsmodels.tsa import tsatools
 from numpy import linalg
 from statsmodels.tsa.stattools import adfuller
@@ -115,64 +115,69 @@ _TCJP2 = numpy.array([
 ])
 
 
-def get_critical_values_trace(dim_index, axis):
+def get_critical_values_trace(dim_index, time_polynomial_order):
     """
     Critical values for Johansen trace statistic.
+    The order of time polynomial in the null-hypothesis allows following values:
+    - p = -1, no deterministic part
+    - p =  0, for constant term
+    - p =  1, for constant plus time-trend
+    - p >  1  returns no critical values
     :param dim_index:
-    :param axis:
+    :param time_polynomial_order: order of time polynomial in the null-hypothesis
     :return:
     """
     jc = None
-    if axis < -1 or axis > 1:
+    if time_polynomial_order < -1 or time_polynomial_order > 1:
         jc = numpy.zeros(3)
 
     elif dim_index < 1 or dim_index > 12:
         jc = numpy.zeros(3)
 
-    elif axis == -1:
+    elif time_polynomial_order == -1:
         jc = _TCJP0[dim_index - 1, :]
 
-    elif axis == 0:
+    elif time_polynomial_order == 0:
         jc = _TCJP1[dim_index - 1, :]
 
-    elif axis == 1:
+    elif time_polynomial_order == 1:
         jc = _TCJP2[dim_index - 1, :]
 
     return jc
 
 
-def get_critical_values_max_eigenvalue(dim_index, axis):
+def get_critical_values_max_eigenvalue(dim_index, time_polynomial_order):
     """
     Critical values for Johansen maximum eigenvalue statistic.
+    The order of time polynomial in the null-hypothesis allows following values:
+    - p = -1, no deterministic part
+    - p =  0, for constant term
+    - p =  1, for constant plus time-trend
+    - p >  1  returns no critical values
+    :param dim_index:
+    :param time_polynomial_order: order of time polynomial in the null-hypothesis
+    :return:
     """
     jc = None
-    if axis < -1 or axis > 1:
+    if time_polynomial_order < -1 or time_polynomial_order > 1:
         jc = numpy.zeros(3)
 
     elif dim_index < 1 or dim_index > 12:
         jc = numpy.zeros(3)
 
-    elif axis == -1:
+    elif time_polynomial_order == -1:
         jc = _ECJP0[dim_index - 1, :]
 
-    elif axis == 0:
+    elif time_polynomial_order == 0:
         jc = _ECJP1[dim_index - 1, :]
 
-    elif axis == 1:
+    elif time_polynomial_order == 1:
         jc = _ECJP2[dim_index - 1, :]
 
     return jc
 
 
-def trimr(x, front, end):
-    if end > 0:
-        return x[front:-end]
-
-    else:
-        return x[front:]
-
-
-def resid(y, x):
+def residuals(y, x):
     if x.size == 0:
         return y
 
@@ -180,50 +185,35 @@ def resid(y, x):
     return r
 
 
-def shift(x, lag):
-    return x[:-lag]
-
-
-def count_rows(x):
-    return x.shape[0]
-
-
-def cointegration_johansen(input_df, trend_order, lag=1):
+def cointegration_johansen(input_df, lag=1):
     """
     For axis: -1 means no deterministic part, 0 means constant term, 1 means constant plus time-trend,
     > 1 means higher order polynomial.
 
     :param input_df: the input vectors as a pandas.DataFrame instance
-    :param trend_order: order of time polynomial in the null-hypothesis
     :param lag: number of lagged difference terms used when computing the estimator
     :return: returns test statistics data
     """
     count_samples, count_dimensions = input_df.shape
-    if trend_order > -1:
-        f = 0
-
-    else:
-        f = trend_order
-
-    input_df = detrend(input_df, key='default', axis=trend_order)
+    input_df = detrend(input_df, type='constant', axis=0)
     diff_input_df = numpy.diff(input_df, 1, axis=0)
     z = tsatools.lagmat(diff_input_df, lag)
-    z = trimr(z, front=lag, end=0)
-    z = detrend(z, key='default', axis=f)
-    diff_input_df = trimr(diff_input_df, front=lag, end=0)
-    diff_input_df = detrend(diff_input_df, key='default', axis=f)
-    r0t = resid(diff_input_df, z)  # diff on lagged diffs
-    lx = shift(input_df, lag)
-    lx = trimr(lx, front=1, end=0)
-    diff_input_df = detrend(lx, key='default', axis=f)
-    rkt = resid(diff_input_df, z)
+    z = z[lag:]
+    z = detrend(z, type='constant', axis=0)
+    diff_input_df = diff_input_df[lag:]
+    diff_input_df = detrend(diff_input_df, type='constant', axis=0)
+    r0t = residuals(diff_input_df, z)
+    lx = input_df[:-lag]
+    lx = lx[1:]
+    diff_input_df = detrend(lx, type='constant', axis=0)
+    rkt = residuals(diff_input_df, z)
 
     if rkt is None:
         return None
 
-    skk = numpy.dot(rkt.T, rkt) / count_rows(rkt)
-    sk0 = numpy.dot(rkt.T, r0t) / count_rows(rkt)
-    s00 = numpy.dot(r0t.T, r0t) / count_rows(r0t)
+    skk = numpy.dot(rkt.T, rkt) / rkt.shape[0]
+    sk0 = numpy.dot(rkt.T, r0t) / rkt.shape[0]
+    s00 = numpy.dot(r0t.T, r0t) / r0t.shape[0]
     sig = numpy.dot(sk0, numpy.dot(linalg.inv(s00), sk0.T))
     eigenvalues, eigenvectors = linalg.eig(numpy.dot(linalg.inv(skk), sig))
 
@@ -244,11 +234,11 @@ def cointegration_johansen(input_df, trend_order, lag=1):
     iota = numpy.ones(count_dimensions)
     t, junk = rkt.shape
     for i in range(0, count_dimensions):
-        tmp = trimr(numpy.log(iota - sorted_eigenvalues), i, 0)
+        tmp = numpy.log(iota - sorted_eigenvalues)[i:]
         trace_statistics[i] = -t * numpy.sum(tmp, 0)
         eigenvalue_statistics[i] = -t * numpy.log(1 - sorted_eigenvalues[i])
-        critical_values_max_eigenvalue[i, :] = get_critical_values_max_eigenvalue(count_dimensions - i, trend_order)
-        critical_values_trace[i, :] = get_critical_values_trace(count_dimensions - i, trend_order)
+        critical_values_max_eigenvalue[i, :] = get_critical_values_max_eigenvalue(count_dimensions - i, time_polynomial_order=0)
+        critical_values_trace[i, :] = get_critical_values_trace(count_dimensions - i, time_polynomial_order=0)
         order_decreasing[i] = i
 
     result = dict()
@@ -264,15 +254,14 @@ def cointegration_johansen(input_df, trend_order, lag=1):
     return result
 
 
-def get_johansen(y, lag=1, significance='95%', trend_order=0):
+def get_johansen(y, lag=1, significance='95%'):
     """
     Get the cointegration vectors at 95% level of significance
     given by the trace statistic test.
     """
-    test_results = cointegration_johansen(y, trend_order=trend_order, lag=lag)
+    test_results = cointegration_johansen(y, lag=lag)
     trace_statistic = test_results['trace_statistic']
     critical_values = test_results['critical_values_trace']
-    count_cointegration_vectors = 0
     significance_indices = {'90%': 0, '95%': 1, '99%': 2}
     count_cointegration_vectors = sum(trace_statistic > critical_values[:, significance_indices[significance]])
     test_results['count_cointegration_vectors'] = count_cointegration_vectors
