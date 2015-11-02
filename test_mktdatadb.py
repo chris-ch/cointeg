@@ -1,7 +1,10 @@
 from datetime import datetime
+
 import pandas
 import pytz
-from mktdatadb import ticks_trades, time_filter
+
+from src.mktdatadb import ticks_trades, time_filter
+
 
 if __name__ == '__main__':
     start_time = datetime(2015, 7, 1, 17, 0)

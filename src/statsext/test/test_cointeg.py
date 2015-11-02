@@ -1,14 +1,14 @@
 import unittest
 import os
 import sys
-import logging
 import pickle
 from datetime import datetime, timedelta
 
 import numpy
 import pandas
 
-from statsext import cointeg
+from src.statsext import cointeg
+
 
 class TestCointegration(unittest.TestCase):
     

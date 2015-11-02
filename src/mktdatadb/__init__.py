@@ -30,6 +30,7 @@ def ticks_from_zip(ticker, start_time, end_time, pattern='BEST'):
     start_date = start_time.date()
     end_date = end_time.date()
     with ZipFile(file_path, 'r') as zip_ticks:
+        logging.info('loading data from zip file %s', file_path)
         files_list = zip_ticks.namelist()
         for current_date in date_range(start_date, end_date):
             current_file = current_date.strftime('%Y%m%d') + '.csv'
@@ -60,11 +61,8 @@ def pairwise(itr):
    return itertools.izip(first, second)
 
 
-def ticks_quotes(ticker, start_time, end_time, ticks_loader=None):
-    if ticks_loader is None:
-        ticks_loader = ticks_from_zip
-        
-    quotes = ticks_loader(ticker, start_time, end_time, pattern='BEST')
+def ticks_quotes(ticker, start_time, end_time):
+    quotes = ticks_from_zip(ticker, start_time, end_time, pattern='BEST')
     current_bid_second = None
     current_ask_second = None
     for mkt_quote, mkt_quote_next in pairwise(quotes):
@@ -84,6 +82,22 @@ def ticks_quotes(ticker, start_time, end_time, ticks_loader=None):
                 
             current_bid_second = None
             current_ask_second = None
+
+
+def ticks_book_states(ticker, start_time, end_time):
+    book_state = {'bid': None, 'ask': None, 'v_bid': None, 'v_ask': None, 'ts': None}
+    for quote in ticks_quotes(ticker, start_time, end_time):
+        if quote[1] == 'BEST_BID':
+            book_state['ts'] = quote[0]
+            book_state['bid'] = quote[2]
+            book_state['v_bid'] = quote[3]
+
+        else:
+            book_state['ts'] = quote[0]
+            book_state['ask'] = quote[2]
+            book_state['v_ask'] = quote[3]
+
+        yield book_state
 
 
 def time_filter(ticks_data, start_time_local_str, end_time_local_str, timezone_local):

@@ -1,12 +1,13 @@
 import logging
-import os
+
 import numpy
 import pandas
-from statsext import cointeg
 from matplotlib import pyplot
 from pandas.stats.api import ols
 
-from mktdata import load_prices_quandl
+from src.statsext import cointeg
+from src.mktdata import load_prices_quandl
+
 
 __author__ = 'Christophe'
 

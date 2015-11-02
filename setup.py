@@ -25,7 +25,7 @@ setup(
     long_description=read('README.md'),
     install_requires=[
         'google-api-python-client',
-        'pandas', 'scipy', 'numpy', 'statsmodels'
+        'pandas', 'scipy', 'numpy', 'statsmodels', 'mock'
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
