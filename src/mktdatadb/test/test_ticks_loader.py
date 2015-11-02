@@ -8,11 +8,10 @@ import gzip
 from mock import patch
 import pytz
 
-from src.mktdatadb import ticks_quotes, time_filter, ticks_book_states
+from mktdatadb import ticks_quotes, time_filter, ticks_book_states
 
 
 def load_test_func(filename):
-
     def load_test(ticker, start_time, end_time, pattern):
         path_to_test_data = os.path.dirname(os.path.realpath(__file__))
         test_data_filename = os.sep.join([path_to_test_data, 'testdata', filename + '.csv.gz'])
@@ -27,9 +26,9 @@ def load_test_func(filename):
 
 
 class TestTicksLoader(unittest.TestCase):
-
-    @patch('mktdatadb.ticks_from_zip', side_effects=load_test_func('HYG-20150302'))
+    @patch('mktdatadb.ticks_from_zip')
     def test_quotes(self, data_loader):
+        data_loader.side_effect = load_test_func('HYG-20150302')
         start_time = datetime(2015, 3, 2, 0, 0)
         end_time = datetime(2015, 3, 2, 23, 59)
         expected = [
@@ -67,8 +66,9 @@ class TestTicksLoader(unittest.TestCase):
         self.maxDiff = None
         self.assertEqual(expected, list(filtered_ticks_data))
 
-    @patch('mktdatadb.ticks_from_zip', side_effects=load_test_func('HYG-20150402'))
+    @patch('mktdatadb.ticks_from_zip')
     def test_quotes_dst(self, data_loader):
+        data_loader.side_effect = load_test_func('HYG-20150402')
         start_time = datetime(2015, 4, 2, 0, 0)
         end_time = datetime(2015, 4, 2, 23, 59)
         expected = [
@@ -105,11 +105,13 @@ class TestTicksLoader(unittest.TestCase):
         self.maxDiff = None
         self.assertEqual(expected, list(filtered_ticks_data))
 
-    @patch('mktdatadb.ticks_from_zip', side_effects=load_test_func('HYG-20150402'))
+    @patch('mktdatadb.ticks_from_zip')
     def test_book_states(self, data_loader):
+        data_loader.side_effect = load_test_func('HYG-20150402')
         start_time = datetime(2015, 4, 2, 0, 0)
         end_time = datetime(2015, 4, 2, 23, 59)
-        print ticks_book_states('HYG US Equity', start_time, end_time)
+        for book_state in ticks_book_states('HYG US Equity', start_time, end_time):
+            print book_state
 
 
 if __name__ == '__main__':

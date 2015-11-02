@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import numpy
 import pandas
 
-from src.statsext import cointeg
+from statsext import cointeg
 
 
 class TestCointegration(unittest.TestCase):

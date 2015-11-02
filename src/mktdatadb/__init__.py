@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from decimal import Decimal
 import logging
 import os
@@ -5,7 +6,6 @@ from urllib import quote
 from zipfile import ZipFile
 from datetime import timedelta, datetime
 import itertools
-from itertools import islice, izip
 import pytz
 
 __author__ = 'Christophe'
@@ -85,17 +85,22 @@ def ticks_quotes(ticker, start_time, end_time):
 
 
 def ticks_book_states(ticker, start_time, end_time):
-    book_state = {'bid': None, 'ask': None, 'v_bid': None, 'v_ask': None, 'ts': None}
-    for quote in ticks_quotes(ticker, start_time, end_time):
-        if quote[1] == 'BEST_BID':
-            book_state['ts'] = quote[0]
-            book_state['bid'] = quote[2]
-            book_state['v_bid'] = quote[3]
+    book_state = OrderedDict()
+    book_state['ts'] = None
+    book_state['v_bid'] = None
+    book_state['bid'] = None
+    book_state['ask'] = None
+    book_state['v_ask'] = None
+    for tick_quote in ticks_quotes(ticker, start_time, end_time):
+        if tick_quote[1] == 'BEST_BID':
+            book_state['ts'] = tick_quote[0]
+            book_state['bid'] = tick_quote[2]
+            book_state['v_bid'] = tick_quote[3]
 
         else:
-            book_state['ts'] = quote[0]
-            book_state['ask'] = quote[2]
-            book_state['v_ask'] = quote[3]
+            book_state['ts'] = tick_quote[0]
+            book_state['ask'] = tick_quote[2]
+            book_state['v_ask'] = tick_quote[3]
 
         yield book_state
 

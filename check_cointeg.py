@@ -5,8 +5,8 @@ import pandas
 from matplotlib import pyplot
 from pandas.stats.api import ols
 
-from src.statsext import cointeg
-from src.mktdata import load_prices_quandl
+from statsext import cointeg
+from mktdata import load_prices_quandl
 
 
 __author__ = 'Christophe'

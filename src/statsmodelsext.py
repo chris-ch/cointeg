@@ -3,7 +3,7 @@ import datetime
 import numpy as np
 import pandas as pd
 
-from src.statsext import cointeg
+from statsext import cointeg
 
 
 __author__ = 'Christophe'

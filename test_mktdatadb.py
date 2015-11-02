@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas
 import pytz
 
-from src.mktdatadb import ticks_trades, time_filter
+from mktdatadb import ticks_trades, time_filter
 
 
 if __name__ == '__main__':
