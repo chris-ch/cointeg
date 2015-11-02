@@ -1,4 +1,5 @@
 import unittest
+import logging
 import os
 import pytz
 from datetime import datetime
@@ -8,12 +9,14 @@ from mktdatadb import ticks_trades, time_filter
 class TestTicksLoader(unittest.TestCase):
 
   def test_quotes(self):
-      start_time = datetime(2015, 7, 1, 17, 0)
-      end_time = datetime(2015, 7, 2, 21, 0)
+      start_time = datetime(2015, 2, 28, 17, 0)
+      end_time = datetime(2015, 3, 2, 21, 0)
       
       def load_test(ticker, start_time, end_time, pattern):
           path_to_test_data = os.path.dirname(os.path.realpath(__file__))
-          with open(os.sep.join([path_to_test_data, 'HYG-20150302.csv']), 'r') as test_data:
+          test_data_filename = os.sep.join([path_to_test_data, 'HYG-20150302.csv'])
+          logging.info('loading test data file %s', test_data_filename)
+          with open(test_data_filename, 'r') as test_data:
               line = test_data.read()
               yield line
       
