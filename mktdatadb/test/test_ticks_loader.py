@@ -4,6 +4,7 @@ import os
 import pytz
 from datetime import datetime
 from decimal import Decimal
+import gzip
 
 from mktdatadb import ticks_quotes, time_filter
 
@@ -15,10 +16,10 @@ class TestTicksLoader(unittest.TestCase):
       
       def load_test(ticker, start_time, end_time, pattern):
           path_to_test_data = os.path.dirname(os.path.realpath(__file__))
-          test_data_filename = os.sep.join([path_to_test_data, 'testdata', 'HYG-20150302.csv'])
+          test_data_filename = os.sep.join([path_to_test_data, 'testdata', 'HYG-20150302.csv.gz'])
           logging.info('loading test data file %s', test_data_filename)
-          with open(test_data_filename, 'r') as test_data:
-              for line in test_data.xreadlines():
+          with gzip.open(test_data_filename, 'r') as test_data:
+              for line in test_data.readlines():
                 if pattern in line:
                   parsed = line.strip().split(',')
                   yield parsed
@@ -64,10 +65,10 @@ class TestTicksLoader(unittest.TestCase):
       
       def load_test(ticker, start_time, end_time, pattern):
           path_to_test_data = os.path.dirname(os.path.realpath(__file__))
-          test_data_filename = os.sep.join([path_to_test_data, 'testdata', 'HYG-20150402.csv'])
+          test_data_filename = os.sep.join([path_to_test_data, 'testdata', 'HYG-20150402.csv.gz'])
           logging.info('loading test data file %s', test_data_filename)
-          with open(test_data_filename, 'r') as test_data:
-              for line in test_data.xreadlines():
+          with gzip.open(test_data_filename, 'r') as test_data:
+              for line in test_data.readlines():
                 if pattern in line:
                   parsed = line.strip().split(',')
                   yield parsed

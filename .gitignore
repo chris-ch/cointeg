@@ -57,3 +57,7 @@ docs/_build/
 target/
 /.idea
 /.quandl_cache
+
+# sensitive data
+sensitive.json
+
