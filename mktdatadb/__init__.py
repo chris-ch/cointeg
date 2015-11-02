@@ -4,6 +4,7 @@ import os
 from urllib import quote
 from zipfile import ZipFile
 from datetime import timedelta, datetime
+from itertools import islice, izip
 import pytz
 
 __author__ = 'Christophe'
@@ -14,7 +15,7 @@ def date_range(start_date, end_date):
         yield start_date + timedelta(n)
 
 
-def ticks(ticker, start_time, end_time, pattern='BEST'):
+def ticks_from_zip(ticker, start_time, end_time, pattern='BEST'):
     """
 
     :param ticker:
@@ -42,16 +43,24 @@ def ticks(ticker, start_time, end_time, pattern='BEST'):
                         yield parsed
 
 
-def ticks_trades(ticker, start_time, end_time):
-    trades = ticks(ticker, start_time, end_time, pattern='TRADE')
+def ticks_trades(ticker, start_time, end_time, ticks_loader=None):
+    if ticks_loader is None:
+        ticks_loader = ticks_from_zip
+        
+    trades = ticks_loader(ticker, start_time, end_time, pattern='TRADE')
     for trade in trades:
         yield trade[0], Decimal(trade[2]), int(Decimal(trade[3])), trade[4]
 
 
-def ticks_quotes(ticker, start_time, end_time):
-    quotes = ticks(ticker, start_time, end_time, pattern='BEST')
-    for mkt_quote in quotes:
-        yield mkt_quote[0], Decimal(mkt_quote[2]), int(Decimal(mkt_quote[3]))
+def ticks_quotes(ticker, start_time, end_time, ticks_loader=None):
+    if ticks_loader is None:
+        ticks_loader = ticks_from_zip
+        
+    quotes = ticks_loader(ticker, start_time, end_time, pattern='BEST')
+    for mkt_quote, mkt_quote_next in izip(quotes, islice(quotes, 1, None)):
+        if mkt_quote[0] != mkt_quote_next[0]:
+            # TODO: returning last from second, test this
+            yield mkt_quote[0], Decimal(mkt_quote[2]), int(Decimal(mkt_quote[3]))
 
 
 def time_filter(ticks_data, start_time_local_str, end_time_local_str, timezone_local):
