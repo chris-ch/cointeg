@@ -4,6 +4,7 @@ import os
 from urllib import quote
 from zipfile import ZipFile
 from datetime import timedelta, datetime
+import itertools
 from itertools import islice, izip
 import pytz
 
@@ -50,6 +51,13 @@ def ticks_trades(ticker, start_time, end_time, ticks_loader=None):
     trades = ticks_loader(ticker, start_time, end_time, pattern='TRADE')
     for trade in trades:
         yield trade[0], Decimal(trade[2]), int(Decimal(trade[3])), trade[4]
+        
+
+def pairwise(itr):
+   first, second = itertools.tee(itr)
+   second.next() # remove first element of second
+   second = itertools.chain(second, [None]) # add final None
+   return itertools.izip(first, second)
 
 
 def ticks_quotes(ticker, start_time, end_time, ticks_loader=None):
@@ -57,10 +65,25 @@ def ticks_quotes(ticker, start_time, end_time, ticks_loader=None):
         ticks_loader = ticks_from_zip
         
     quotes = ticks_loader(ticker, start_time, end_time, pattern='BEST')
-    for mkt_quote, mkt_quote_next in izip(quotes, islice(quotes, 1, None)):
-        if mkt_quote[0] != mkt_quote_next[0]:
-            # TODO: returning last from second, test this
-            yield mkt_quote[0], Decimal(mkt_quote[2]), int(Decimal(mkt_quote[3]))
+    current_bid_second = None
+    current_ask_second = None
+    for mkt_quote, mkt_quote_next in pairwise(quotes):
+        if  mkt_quote[1] == 'BEST_BID':
+            current_bid_second = mkt_quote[0], mkt_quote[1], Decimal(mkt_quote[2]), int(Decimal(mkt_quote[3]))
+        
+        if  mkt_quote[1] == 'BEST_ASK':
+            current_ask_second = mkt_quote[0], mkt_quote[1], Decimal(mkt_quote[2]), int(Decimal(mkt_quote[3]))
+        
+        if mkt_quote_next is None or mkt_quote[0] != mkt_quote_next[0]:
+            # current entry is the last for current second
+            if current_bid_second is not None:
+                yield current_bid_second
+                
+            if current_ask_second is not None:
+                yield current_ask_second
+                
+            current_bid_second = None
+            current_ask_second = None
 
 
 def time_filter(ticks_data, start_time_local_str, end_time_local_str, timezone_local):
@@ -79,5 +102,5 @@ def time_filter(ticks_data, start_time_local_str, end_time_local_str, timezone_l
                                      tick_second_utc, tzinfo=pytz.UTC)
         tick_datetime_local = tick_datetime_utc.astimezone(timezone_local)
         tick_datetime_local_str = tick_datetime_local.strftime('%H%M%S')
-        if tick_datetime_local_str >= start_time_local_str and tick_datetime_local_str <= end_time_local_str:
+        if tick_datetime_local_str >= start_time_local_str and tick_datetime_local_str < end_time_local_str:
             yield tick_data
