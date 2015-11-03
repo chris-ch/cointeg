@@ -8,7 +8,8 @@ import gzip
 from mock import patch
 import pytz
 
-from mktdatadb import ticks_quotes, time_filter, ticks_book_states
+from mktdatadb import _ticks_quotes, _time_filter, load_book_states, load_tick_data, ON_TIME_NYSEARCA, TZ_NYSEARCA, \
+    OFF_TIME_NYSEARCA
 
 
 def load_mktdata_func(filename):
@@ -26,7 +27,7 @@ def load_mktdata_func(filename):
 
 
 class TestTicksLoader(unittest.TestCase):
-    @patch('mktdatadb.ticks_from_zip')
+    @patch('mktdatadb._ticks_from_zip')
     def test_quotes(self, data_loader):
         data_loader.side_effect = load_mktdata_func('HYG-20150302')
         start_time = datetime(2015, 3, 2, 0, 0)
@@ -61,12 +62,12 @@ class TestTicksLoader(unittest.TestCase):
             ('2015-03-02 14:30:59.000000', 'BEST_ASK', Decimal('89.9345'), 16),
         ]
 
-        ticks_data = ticks_quotes('HYG US Equity', start_time, end_time)
-        filtered_ticks_data = time_filter(ticks_data, '093000', '093100', pytz.timezone('US/Eastern'))
+        ticks_data = _ticks_quotes('HYG US Equity', start_time, end_time)
+        filtered_ticks_data = _time_filter(ticks_data, '093000', '093100', pytz.timezone('US/Eastern'))
         self.maxDiff = None
         self.assertEqual(expected, list(filtered_ticks_data))
 
-    @patch('mktdatadb.ticks_from_zip')
+    @patch('mktdatadb._ticks_from_zip')
     def test_quotes_dst(self, data_loader):
         data_loader.side_effect = load_mktdata_func('HYG-20150402')
         start_time = datetime(2015, 4, 2, 0, 0)
@@ -100,18 +101,32 @@ class TestTicksLoader(unittest.TestCase):
             ('2015-04-02 13:30:59.000000', 'BEST_BID', Decimal('90.35'), 10),
             ('2015-04-02 13:30:59.000000', 'BEST_ASK', Decimal('90.36'), 1)]
 
-        ticks_data = ticks_quotes('HYG US Equity', start_time, end_time)
-        filtered_ticks_data = time_filter(ticks_data, '093000', '093100', pytz.timezone('US/Eastern'))
+        ticks_data = _ticks_quotes('HYG US Equity', start_time, end_time)
+        filtered_ticks_data = _time_filter(ticks_data, '093000', '093100', pytz.timezone('US/Eastern'))
         self.maxDiff = None
         self.assertEqual(expected, list(filtered_ticks_data))
 
-    @patch('mktdatadb.ticks_from_zip')
+    @patch('mktdatadb._ticks_from_zip')
     def test_book_states(self, data_loader):
         data_loader.side_effect = load_mktdata_func('HYG-20150402')
         start_time = datetime(2015, 4, 2, 0, 0)
         end_time = datetime(2015, 4, 2, 23, 59)
-        for book_state in ticks_book_states('HYG US Equity', start_time, end_time):
-            print book_state
+        book_states = list(
+            load_book_states('HYG US Equity', start_time, end_time, ON_TIME_NYSEARCA, OFF_TIME_NYSEARCA, TZ_NYSEARCA))
+        expected_first = {'ts': '2015-04-02 13:30:00.000000',
+                          'v_bid': 2,
+                          'bid': Decimal('90.38'),
+                          'ask': None,
+                          'v_ask': None
+                          }
+        expected_last = {'ts': '2015-04-02 19:59:59.000000',
+                         'v_bid': 63,
+                         'bid': Decimal('90.47'),
+                         'ask': Decimal('90.48'),
+                         'v_ask': 10
+                         }
+        self.assertEqual(expected_first, book_states[0])
+        self.assertEqual(expected_last, book_states[-1])
 
 
 if __name__ == '__main__':
