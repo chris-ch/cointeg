@@ -20,8 +20,10 @@ if __name__ == '__main__':
 
     nyse_arca = LoaderARCA()
     start_date = datetime(2015, 3, 1)
-    end_date = datetime(2015, 3, 5)
+    end_date = datetime(2015, 3, 31)
     book_states = nyse_arca.load_book_states('HYG US Equity', start_date, end_date)
-    print book_states
+    book_states.to_pickle('HYG.pkl')
+    book_states = nyse_arca.load_book_states('JNK US Equity', start_date, end_date)
+    book_states.to_pickle('JNK.pkl')
     #for book_state in ticks_book_states('HYG US Equity', start_time, end_time):
     #    print book_state
