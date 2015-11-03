@@ -3,10 +3,11 @@ from decimal import Decimal
 import glob
 import logging
 import os
-from urllib import quote
+from urllib import quote, unquote
 from zipfile import ZipFile
 from datetime import timedelta, datetime
 import itertools
+import pandas
 import pytz
 
 __author__ = 'Christophe'
@@ -14,6 +15,7 @@ __author__ = 'Christophe'
 ON_TIME_NYSEARCA = '093000'
 OFF_TIME_NYSEARCA = '160000'
 TZ_NYSEARCA = 'US/Eastern'
+
 
 def _date_range(start_date, end_date):
     for n in range(int((end_date - start_date).days) + 1):
@@ -24,7 +26,13 @@ def _get_db_path(db_name):
     return os.sep.join(['G:', 'mktdata', db_name])
 
 
-def _ticks_from_zip(ticker, start_time, end_time, pattern='BEST'):
+def _get_file_path(ticker, db_name):
+    encoded_ticker = quote(ticker)
+    file_path = os.sep.join([_get_db_path(db_name), encoded_ticker + '.zip'])
+    return file_path
+
+
+def _ticks_from_zip(ticker, start_time, end_time, db_name, pattern='BEST'):
     """
 
     :param ticker:
@@ -33,8 +41,7 @@ def _ticks_from_zip(ticker, start_time, end_time, pattern='BEST'):
     :param pattern: 'BEST' for bid-ask, 'TRADE' for trades
     :return:
     """
-    encoded_ticker = quote(ticker)
-    file_path = os.sep.join([_get_db_path('equities'), encoded_ticker + '.zip'])
+    file_path = _get_file_path(ticker, db_name)
     start_date = start_time.date()
     end_date = end_time.date()
     with ZipFile(file_path, 'r') as zip_ticks:
@@ -53,11 +60,8 @@ def _ticks_from_zip(ticker, start_time, end_time, pattern='BEST'):
                         yield parsed
 
 
-def ticks_trades(ticker, start_time, end_time, ticks_loader=None):
-    if ticks_loader is None:
-        ticks_loader = _ticks_from_zip
-
-    trades = ticks_loader(ticker, start_time, end_time, pattern='TRADE')
+def ticks_trades(ticker, start_time, end_time, db_name='equities'):
+    trades = _ticks_from_zip(ticker, start_time, end_time, db_name, pattern='TRADE')
     for trade in trades:
         yield trade[0], Decimal(trade[2]), int(Decimal(trade[3])), trade[4]
 
@@ -69,7 +73,7 @@ def _pairwise(itr):
     return itertools.izip(first, second)
 
 
-def _ticks_quotes(ticker, start_time, end_time):
+def _ticks_quotes(ticker, start_time, end_time, db_name='equities'):
     """
 
     :param ticker:
@@ -77,7 +81,7 @@ def _ticks_quotes(ticker, start_time, end_time):
     :param end_time:
     :return: tuple (timestamp, type_bid_ask, price, quantity)
     """
-    quotes = _ticks_from_zip(ticker, start_time, end_time, pattern='BEST')
+    quotes = _ticks_from_zip(ticker, start_time, end_time, db_name, pattern='BEST')
     current_bid_second = None
     current_ask_second = None
     for mkt_quote, mkt_quote_next in _pairwise(quotes):
@@ -157,6 +161,48 @@ def load_book_states(ticker, start_datetime, end_datetime, market_on_time, marke
 
 
 def list_tickers(db_name):
+    tickers = list()
     for filename in glob.glob(os.sep.join([_get_db_path(db_name), '*.zip'])):
-        yield filename
+        ticker = unquote(os.path.basename(filename).split('.')[0])
+        tickers.append(ticker)
 
+    return sorted(tickers)
+
+
+def get_date_range(ticker, db_name):
+    file_path = _get_file_path(ticker, db_name)
+    with ZipFile(file_path, 'r') as zip_ticks:
+        logging.info('loading data from zip file %s', file_path)
+        files_list = sorted(zip_ticks.namelist())
+
+    start_date = files_list[0][:-4]
+    end_date = files_list[-1][:-4]
+    start_date_split = '%s-%s-%s' % (start_date[:4], start_date[4:6], start_date[6:8])
+    end_date_split = '%s-%s-%s' % (end_date[:4], end_date[4:6], end_date[6:8])
+    return start_date_split, end_date_split
+
+
+class LoaderARCA(object):
+    def __init__(self):
+        self._on_time = ON_TIME_NYSEARCA
+        self._off_time = OFF_TIME_NYSEARCA
+        self._timezone = TZ_NYSEARCA
+        self._db_name = 'equities'
+
+    def list_tickers(self):
+        return list_tickers(self._db_name)
+
+    def load_book_states(self, ticker, start_date=None, end_date=None):
+        full_start_date, full_end_date = get_date_range(ticker, self._db_name)
+        if start_date is None:
+            start_date = datetime.strptime(full_start_date, '%Y-%m-%d')
+
+        if end_date is None:
+            end_date = datetime.strptime(full_end_date, '%Y-%m-%d')
+
+        logging.info('loading %s for date range: %s through %s', ticker, start_date, end_date)
+        book_states = load_book_states(ticker, start_date, end_date, self._on_time, self._off_time, self._timezone)
+        df = pandas.DataFrame.from_dict(list(book_states))
+        df['ts'] = pandas.to_datetime(df['ts'])
+        df.set_index('ts', inplace=True)
+        return df

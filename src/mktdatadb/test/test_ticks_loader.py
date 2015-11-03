@@ -13,7 +13,7 @@ from mktdatadb import _ticks_quotes, _time_filter, load_book_states, load_tick_d
 
 
 def load_mktdata_func(filename):
-    def load_test(ticker, start_time, end_time, pattern):
+    def load_test(ticker, start_time, end_time, db_name, pattern):
         path_to_test_data = os.path.dirname(os.path.realpath(__file__))
         test_data_filename = os.sep.join([path_to_test_data, 'testdata', filename + '.csv.gz'])
         logging.info('loading test data file %s', test_data_filename)
