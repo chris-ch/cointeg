@@ -172,7 +172,7 @@ def list_tickers(db_name):
 def get_date_range(ticker, db_name):
     file_path = _get_file_path(ticker, db_name)
     with ZipFile(file_path, 'r') as zip_ticks:
-        logging.info('loading data from zip file %s', file_path)
+        logging.debug('loading data from zip file %s', file_path)
         files_list = sorted(zip_ticks.namelist())
 
     start_date = files_list[0][:-4]
@@ -204,5 +204,6 @@ class LoaderARCA(object):
         book_states = load_book_states(ticker, start_date, end_date, self._on_time, self._off_time, self._timezone)
         df = pandas.DataFrame.from_dict(list(book_states))
         df['ts'] = pandas.to_datetime(df['ts'])
+        df.drop_duplicates(subset='ts', take_last=True, inplace=True)
         df.set_index('ts', inplace=True)
         return df
