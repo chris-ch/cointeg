@@ -60,20 +60,15 @@ class TestCointegration(unittest.TestCase):
         n = len(s1)
         index = pandas.date_range(test_date - timedelta(10), periods=n, freq='D')
         y = pandas.DataFrame(index=index, data={'col1': x_1t, 'col2': x_2t, 'col3': x_3t})
-        jres = cointeg.get_johansen(y, lag=1)
-        self.assertEquals(2, jres['count_cointegration_vectors'], 'number of cointegration vectors does not match')
-        v1 = jres['cointegration_vectors'][:, 0]
-        v2 = jres['cointegration_vectors'][:, 1]
-        v3 = jres['eigenvectors'][:, 2]  # v3 is not a cointegration vector
+        vectors = cointeg.get_johansen(y, lag=1)
+        v1 = vectors[0]
+        v2 = vectors[1]
         expected_v1 = numpy.array([1.18712515, -2.37415904, 3.14587243])
         numpy.testing.assert_almost_equal(v1, expected_v1)
         expected_v2 = numpy.array([-0.76082907, 1.52149628, -0.32817785])
         numpy.testing.assert_almost_equal(v2, expected_v2)
-        expected_v3 = numpy.array([0.00019993, 0.04721915, -0.04629564])
-        numpy.testing.assert_almost_equal(v3, expected_v3)
         self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v1), significance='10%'))
         self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v2), significance='10%'))
-        self.assertTrue(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v3), significance='5%'))
     
 if __name__ == '__main__':
     unittest.main()

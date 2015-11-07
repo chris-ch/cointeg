@@ -254,17 +254,19 @@ def cointegration_johansen(input_df, lag=1):
     return result
 
 
-def get_johansen(y, lag=1, significance='95%'):
+def get_johansen(input_vectors, lag=1, significance='95%'):
     """
-    Get the cointegration vectors at 95% level of significance
-    given by the trace statistic test.
+    Cointegration vectors at the specified level of significance given by the trace statistic test.
+
+    :param input_vectors:
+    :param lag:
+    :param significance:
+    :return:
     """
-    test_results = cointegration_johansen(y, lag=lag)
+    test_results = cointegration_johansen(input_vectors, lag=lag)
     trace_statistic = test_results['trace_statistic']
     critical_values = test_results['critical_values_trace']
     significance_indices = {'90%': 0, '95%': 1, '99%': 2}
     count_cointegration_vectors = sum(trace_statistic > critical_values[:, significance_indices[significance]])
-    test_results['count_cointegration_vectors'] = count_cointegration_vectors
-    test_results['cointegration_vectors'] = test_results['eigenvectors'][:, :count_cointegration_vectors]
-    return test_results
-
+    vectors = test_results['eigenvectors'][:, :count_cointegration_vectors]
+    return [vectors[:, index] / abs(vectors[:, index]).min() for index in xrange(count_cointegration_vectors)]
