@@ -5,7 +5,8 @@ import pandas
 from datetime import datetime
 from matplotlib import pyplot
 from matplotlib import ticker
-import sys
+from statsmodels.formula.api import ols
+import math
 from mktdatadb import list_tickers, LoaderARCA, get_date_range
 
 from statsext import cointeg
@@ -43,46 +44,64 @@ class IrregularDatetimeFormatter(ticker.Formatter):
         return as_timestamp.strftime(self._format)
 
 
+class CoIntegration(object):
+
+    def __init__(self, training_set):
+        cointeg_vectors = cointeg.get_johansen(training_set, lag=1)
+        if len(cointeg_vectors) > 0:
+            self._vector = cointeg_vectors[0]
+            self._calibration = pandas.DataFrame(training_set.dot(self._vector))
+            self._calibration.columns = ['signal']
+            delta_calibration = self._calibration - self._calibration.shift(periods=1)
+            delta_calibration.columns = ['dy']
+            delta_calibration['y'] = self._calibration.shift(1)
+            regress = ols(data=delta_calibration, formula='dy ~ y').fit()
+            logging.info('regression results: %s', regress.summary())
+            self._half_life = -int(math.log(2) / regress.params.y)
+
+    @property
+    def calibration(self):
+        return self._calibration
+
+    @property
+    def half_life(self):
+        return self._half_life
+
+    @property
+    def vector(self):
+        return self._vector
+
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     df1 = pandas.read_pickle(os.sep.join(['data', 'HYG.pkl'])).astype(float)
     df2 = pandas.read_pickle(os.sep.join(['data', 'JNK.pkl'])).astype(float)
     df = pandas.concat([(df1['bid'] + df1['ask']) / 2, (df2['bid'] + df2['ask']) / 2], axis=1).ffill()
     df.columns = ['HYG', 'JNK']
-    vectors = cointeg.get_johansen(df[df.index <= '2015-04-30'], lag=1)
-    print vectors
-    calibration = df[df.index <= '2015-04-30'].dot(vectors[0])
-    print calibration.describe()
-    signal = pandas.DataFrame(df[df.index >= '2015-05-01'].dot(vectors[0]), columns=['signal'])
-    signal.plot()
+    cointegration = CoIntegration(df[df.index <= '2015-04-30'])
+    print 'half-life', cointegration.half_life
+    print
+    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-10')].dot(cointegration.vector), columns=['signal'])
+
     formatter = IrregularDatetimeFormatter(signal.index.values)
-    fig, ax1 = pyplot.subplots()
-    ax1.xaxis.set_major_formatter(formatter)
-    signal.plot(ax=ax1, x=numpy.arange(len(signal)))
-    fig, ax2 = pyplot.subplots()
-    ax2.xaxis.set_major_formatter(formatter)
-    df.plot(ax=ax2, x=numpy.arange(len(df)), subplots=True)
-    print '----'
-    print signal
-    print '----'
-    pyplot.show()
-    sys.exit(0)
-    avg = pandas.ewma(signal['signal'], halflife=5000)
-    threshold = calibration.std() * 0.5
+
+    fig, x_prices = pyplot.subplots()
+    x_prices.xaxis.set_major_formatter(formatter)
+    df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
+
+    avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
+    threshold = 0.9 * cointegration.calibration['signal'].std()
     signal['threshold1'] = avg - 2 * threshold
     signal['threshold2'] = avg - threshold
     signal['average'] = avg
     signal['threshold3'] = avg + threshold
     signal['threshold4'] = avg + 2 * threshold
-    print signal
-    plot1 = signal[signal.index.normalize() == '2015-05-01']
-    plot2 = signal[signal.index.normalize() == '2015-05-05']
-    plot3 = signal[signal.index.normalize() == '2015-05-06']
-    plot1.index = plot1.index.time
-    plot2.index = plot2.index.time
-    plot3.index = plot3.index.time
-    plot1.plot()
-    plot2.plot()
-    plot3.plot()
+    fig, ax_signal = pyplot.subplots()
+    ax_signal.xaxis.set_major_formatter(formatter)
+    signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
 
-    #df1[['bid', 'ask']][(df1.index >= '2015-03-17') & (df1.index < '2015-03-21')].plot()
+    ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
+    fig, ax_ref_level = pyplot.subplots()
+    ax_ref_level.xaxis.set_major_formatter(formatter)
+    ref_level.plot(ax=ax_ref_level, x=numpy.arange(len(signal)))
+
+    pyplot.show()
