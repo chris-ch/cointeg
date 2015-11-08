@@ -1,8 +1,10 @@
 import logging
 import os
+import numpy
 import pandas
 from datetime import datetime
 from matplotlib import pyplot
+from matplotlib import ticker
 import sys
 from mktdatadb import list_tickers, LoaderARCA, get_date_range
 
@@ -25,6 +27,22 @@ def save_sample():
     book_states.to_pickle('JNK.pkl')
 
 
+class IrregularDatetimeFormatter(ticker.Formatter):
+
+    def __init__(self, dates, format='%Y-%m-%d %H:%M:%S'):
+        self.dates = dates
+        self._format = format
+
+    def __call__(self, x, pos=0):
+        """ Label for time x at position pos. """
+        ind = int(round(x))
+        if ind >= len(self.dates) or ind < 0:
+            return ''
+
+        as_timestamp = pandas.to_datetime(str(self.dates[ind]))
+        return as_timestamp.strftime(self._format)
+
+
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     df1 = pandas.read_pickle(os.sep.join(['data', 'HYG.pkl'])).astype(float)
@@ -36,10 +54,19 @@ if __name__ == '__main__':
     calibration = df[df.index <= '2015-04-30'].dot(vectors[0])
     print calibration.describe()
     signal = pandas.DataFrame(df[df.index >= '2015-05-01'].dot(vectors[0]), columns=['signal'])
+    signal.plot()
+    formatter = IrregularDatetimeFormatter(signal.index.values)
+    fig, ax1 = pyplot.subplots()
+    ax1.xaxis.set_major_formatter(formatter)
+    signal.plot(ax=ax1, x=numpy.arange(len(signal)))
+    fig, ax2 = pyplot.subplots()
+    ax2.xaxis.set_major_formatter(formatter)
+    df.plot(ax=ax2, x=numpy.arange(len(df)), subplots=True)
     print '----'
     print signal
     print '----'
-    # dividend paid at this time
+    pyplot.show()
+    sys.exit(0)
     avg = pandas.ewma(signal['signal'], halflife=5000)
     threshold = calibration.std() * 0.5
     signal['threshold1'] = avg - 2 * threshold
@@ -57,6 +84,5 @@ if __name__ == '__main__':
     plot1.plot()
     plot2.plot()
     plot3.plot()
-    pyplot.show()
 
     #df1[['bid', 'ask']][(df1.index >= '2015-03-17') & (df1.index < '2015-03-21')].plot()
