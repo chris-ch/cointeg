@@ -1,7 +1,6 @@
 import logging
 import os
 import numpy
-from openpyxl.writer.excel import ExcelWriter
 import pandas
 from datetime import datetime
 from matplotlib import pyplot
@@ -110,8 +109,8 @@ if __name__ == '__main__':
     signal['threshold_short_prev'] = signal['threshold_short'].shift(periods=1)
     signal['threshold_long'] = signal.apply(find_threshold_long, axis=1)
     signal['threshold_long_prev'] = signal['threshold_long'].shift(periods=1)
-    writer = ExcelWriter('signal.test.xlsx')
-    signal.to_excel(writer)
+    writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
+    signal.to_excel(writer, 'Sheet1')
     writer.save()
     fig, ax_signal = pyplot.subplots()
     ax_signal.xaxis.set_major_formatter(formatter)
