@@ -1,6 +1,7 @@
 import logging
 import os
 import numpy
+from openpyxl.writer.excel import ExcelWriter
 import pandas
 from datetime import datetime
 from matplotlib import pyplot
@@ -90,18 +91,35 @@ if __name__ == '__main__':
 
     avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
     threshold = 0.9 * cointegration.calibration['signal'].std()
-    signal['threshold1'] = avg - 2 * threshold
-    signal['threshold2'] = avg - threshold
-    signal['average'] = avg
-    signal['threshold3'] = avg + threshold
-    signal['threshold4'] = avg + 2 * threshold
+
+    columns = ['threshold1', 'threshold2', 'average', 'threshold3', 'threshold4']
+    granularity = int(len(columns) / 2)
+    thresholds = [avg - count * threshold for count in xrange(-granularity, granularity + 1)]
+    for count, column in enumerate(columns):
+        signal[column] = thresholds[count]
+
+    # compute threshold for going long and threshold for going short
+
+    def find_threshold_short(row):
+        return row[columns][row[columns] <= row['signal']].max()
+
+    def find_threshold_long(row):
+        return row[columns][row[columns] >= row['signal']].min()
+
+    signal['threshold_short'] = signal.apply(find_threshold_short, axis=1)
+    signal['threshold_short_prev'] = signal['threshold_short'].shift(periods=1)
+    signal['threshold_long'] = signal.apply(find_threshold_long, axis=1)
+    signal['threshold_long_prev'] = signal['threshold_long'].shift(periods=1)
+    writer = ExcelWriter('signal.test.xlsx')
+    signal.to_excel(writer)
+    writer.save()
     fig, ax_signal = pyplot.subplots()
     ax_signal.xaxis.set_major_formatter(formatter)
-    signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
+    signal[['signal'] + columns].plot(ax=ax_signal, x=numpy.arange(len(signal)))
 
-    ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
-    fig, ax_ref_level = pyplot.subplots()
-    ax_ref_level.xaxis.set_major_formatter(formatter)
-    ref_level.plot(ax=ax_ref_level, x=numpy.arange(len(signal)))
+    #ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
+    #fig, ax_ref_level = pyplot.subplots()
+    #ax_ref_level.xaxis.set_major_formatter(formatter)
+    #ref_level.plot(ax=ax_ref_level, x=numpy.arange(len(signal)))
 
     pyplot.show()
