@@ -29,7 +29,6 @@ def save_sample():
 
 
 class IrregularDatetimeFormatter(ticker.Formatter):
-
     def __init__(self, dates, format='%Y-%m-%d %H:%M:%S'):
         self.dates = dates
         self._format = format
@@ -45,7 +44,6 @@ class IrregularDatetimeFormatter(ticker.Formatter):
 
 
 class CoIntegration(object):
-
     def __init__(self, training_set):
         cointeg_vectors = cointeg.get_johansen(training_set, lag=1)
         if len(cointeg_vectors) > 0:
@@ -71,6 +69,7 @@ class CoIntegration(object):
     def vector(self):
         return self._vector
 
+
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     df1 = pandas.read_pickle(os.sep.join(['data', 'HYG.pkl'])).astype(float)
@@ -80,7 +79,8 @@ if __name__ == '__main__':
     cointegration = CoIntegration(df[df.index <= '2015-04-30'])
     print 'half-life', cointegration.half_life
     print
-    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-10')].dot(cointegration.vector), columns=['signal'])
+    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-10')].dot(cointegration.vector),
+                              columns=['signal'])
 
     formatter = IrregularDatetimeFormatter(signal.index.values)
 
@@ -91,6 +91,7 @@ if __name__ == '__main__':
     avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
     threshold = 0.9 * cointegration.calibration['signal'].std()
 
+    logging.info('finding crossing levels')
     columns = ['threshold1', 'threshold2', 'average', 'threshold3', 'threshold4']
     granularity = int(len(columns) / 2)
     thresholds = [avg - count * threshold for count in xrange(-granularity, granularity + 1)]
@@ -99,16 +100,20 @@ if __name__ == '__main__':
 
     # compute threshold for going long and threshold for going short
 
-    def find_threshold_short(row):
-        return row[columns][row[columns] <= row['signal']].max()
+    logging.info('finding current crossing levels')
 
-    def find_threshold_long(row):
-        return row[columns][row[columns] >= row['signal']].min()
+    def find_thresholds(row):
+        threshold_long = row[columns][row[columns] <= row['signal']].max()
+        threshold_short = row[columns][row[columns] <= row['signal']].min()
+        return pandas.Series({'threshold_long': threshold_long, 'threshold_short': threshold_short})
 
-    signal['threshold_short'] = signal.apply(find_threshold_short, axis=1)
-    signal['threshold_short_prev'] = signal['threshold_short'].shift(periods=1)
-    signal['threshold_long'] = signal.apply(find_threshold_long, axis=1)
+    signal_thresholds = signal.apply(find_thresholds, axis=1)
+    logging.info('concatenating results')
+    signal = pandas.concat([signal, signal_thresholds], axis=1)
+    logging.info('shifting values')
     signal['threshold_long_prev'] = signal['threshold_long'].shift(periods=1)
+    signal['threshold_short_prev'] = signal['threshold_short'].shift(periods=1)
+    logging.info('writing results to output file')
     writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
     signal.to_excel(writer, 'Sheet1')
     writer.save()
@@ -116,7 +121,7 @@ if __name__ == '__main__':
     ax_signal.xaxis.set_major_formatter(formatter)
     signal[['signal'] + columns].plot(ax=ax_signal, x=numpy.arange(len(signal)))
 
-    #ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
+    # ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
     #fig, ax_ref_level = pyplot.subplots()
     #ax_ref_level.xaxis.set_major_formatter(formatter)
     #ref_level.plot(ax=ax_ref_level, x=numpy.arange(len(signal)))
