@@ -7,6 +7,7 @@ from matplotlib import pyplot
 from matplotlib import ticker
 from statsmodels.formula.api import ols
 import math
+from bollinger import get_position_scaling
 from mktdatadb import list_tickers, LoaderARCA, get_date_range
 
 from statsext import cointeg
@@ -88,38 +89,39 @@ if __name__ == '__main__':
     x_prices.xaxis.set_major_formatter(formatter)
     df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
 
-    avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
+    #avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
+    avg = cointegration.calibration['signal'].mean()
     threshold = 0.9 * cointegration.calibration['signal'].std()
+    logging.info('size of threshold: %.2f', threshold)
+    cumul = {'current_scaling': 0.}
 
+    def scale(row, cumul=cumul):
+        current_scaling = cumul['current_scaling']
+        price = row['signal']
+        new_position_scaling = get_position_scaling(price, current_scaling, avg, threshold)
+        # updating for next step
+        cumul['current_scaling'] = new_position_scaling
+        result = {
+            'band_inf': avg + ((new_position_scaling + 1) * threshold),
+            'band_mid': avg + (new_position_scaling * threshold),
+            'band_sup': avg + ((new_position_scaling - 1) * threshold)
+        }
+        return pandas.Series(result)
+
+    signal = pandas.concat([signal, signal.apply(scale, axis=1)], axis=1)
     logging.info('finding crossing levels')
-    columns = ['threshold1', 'threshold2', 'average', 'threshold3', 'threshold4']
-    granularity = int(len(columns) / 2)
-    thresholds = [avg - count * threshold for count in xrange(-granularity, granularity + 1)]
-    for count, column in enumerate(columns):
-        signal[column] = thresholds[count]
 
     # compute threshold for going long and threshold for going short
 
     logging.info('finding current crossing levels')
 
-    def find_thresholds(row):
-        threshold_long = row[columns][row[columns] <= row['signal']].max()
-        threshold_short = row[columns][row[columns] <= row['signal']].min()
-        return pandas.Series({'threshold_long': threshold_long, 'threshold_short': threshold_short})
-
-    signal_thresholds = signal.apply(find_thresholds, axis=1)
-    logging.info('concatenating results')
-    signal = pandas.concat([signal, signal_thresholds], axis=1)
-    logging.info('shifting values')
-    signal['threshold_long_prev'] = signal['threshold_long'].shift(periods=1)
-    signal['threshold_short_prev'] = signal['threshold_short'].shift(periods=1)
     logging.info('writing results to output file')
     writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
     signal.to_excel(writer, 'Sheet1')
     writer.save()
     fig, ax_signal = pyplot.subplots()
     ax_signal.xaxis.set_major_formatter(formatter)
-    signal[['signal'] + columns].plot(ax=ax_signal, x=numpy.arange(len(signal)))
+    signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
 
     # ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
     #fig, ax_ref_level = pyplot.subplots()
