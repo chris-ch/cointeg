@@ -80,7 +80,7 @@ if __name__ == '__main__':
     cointegration = CoIntegration(df[df.index <= '2015-04-30'])
     print 'half-life', cointegration.half_life
     print
-    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-10')].dot(cointegration.vector),
+    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-20')].dot(cointegration.vector),
                               columns=['signal'])
 
     formatter = IrregularDatetimeFormatter(signal.index.values)
@@ -91,7 +91,7 @@ if __name__ == '__main__':
 
     #avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
     avg = cointegration.calibration['signal'].mean()
-    threshold = 0.9 * cointegration.calibration['signal'].std()
+    threshold = 0.95 * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
     cumul = {'current_scaling': 0.}
 
