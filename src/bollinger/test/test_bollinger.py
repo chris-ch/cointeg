@@ -121,7 +121,6 @@ class TestBollinger(unittest.TestCase):
                     Timestamp('2013-01-27 00:00:00'): -1.0, Timestamp('2012-04-04 00:00:00'): 0.0,
                     Timestamp('2012-04-18 00:00:00'): 1.0, Timestamp('2013-01-12 00:00:00'): 0.0}
         variations = df_diff[df_diff != 0.].cumsum().to_dict()
-        df['position_scaling'].plot()
         self.assertEqual(expected, variations)
 
     def test_bollinger_limit(self):
@@ -156,6 +155,4 @@ class TestBollinger(unittest.TestCase):
                     Timestamp('2012-04-18 00:00:00'): 1.0, Timestamp('2012-04-04 00:00:00'): 0.0,
                     Timestamp('2013-01-12 00:00:00'): 0.0}
         variations = df_diff[df_diff != 0.].cumsum()
-        df['position_scaling'].plot()
-        pyplot.show()
         testing.assert_series_equal(pandas.Series(expected, name='position_scaling'), variations)
