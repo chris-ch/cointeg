@@ -269,4 +269,4 @@ def get_johansen(input_vectors, lag=1, significance='95%'):
     significance_indices = {'90%': 0, '95%': 1, '99%': 2}
     count_cointegration_vectors = sum(trace_statistic > critical_values[:, significance_indices[significance]])
     vectors = test_results['eigenvectors'][:, :count_cointegration_vectors]
-    return [vectors[:, index] / abs(vectors[:, index]).min() for index in xrange(count_cointegration_vectors)]
+    return [vectors[:, index] / abs(vectors[:, index]).min() for index in range(count_cointegration_vectors)]

@@ -13,5 +13,5 @@ if __name__ == '__main__':
     filtered_ticks_data = _time_filter(ticks_data, '093000', '160000', pytz.timezone('US/Eastern'))
     df = pandas.DataFrame(filtered_ticks_data, columns=['date', 'price', 'qty', 'type'])
     df.set_index('date', inplace=True)
-    print df.head()
-    print df.tail()
+    print(df.head())
+    print(df.tail())

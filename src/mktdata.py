@@ -1,7 +1,8 @@
 import os
 import json
 import logging
-from urllib import quote_plus
+from urllib import parse
+
 import pandas
 import Quandl
 
@@ -21,7 +22,7 @@ def load_prices_quandl(codes, start_date=None, end_date=None, field_selector='CL
     if not os.path.isdir(os.path.abspath(_CACHE_LOCATION)):
         os.makedirs(os.path.abspath(_CACHE_LOCATION))
 
-    datasets_encoded = quote_plus('@'.join(codes))
+    datasets_encoded = parse.quote('@'.join(codes))
     cache_path = os.path.abspath(os.sep.join([_CACHE_LOCATION, datasets_encoded]))
     if os.path.isfile(cache_path):
         logging.info('reading datasets from local cache')

@@ -14,19 +14,17 @@ def read(fname):
 
 
 setup(
-    name='an_example_pypi_project',
+    name='stat arb toolbox',
     version='0.1',
-    author='Christpohe',
+    author='Christophe',
     author_email='chris.perso@gmail.com',
     description='investigating mean reversion on ETFs.',
     license='BSD',
     keywords='mean reversion systematic trading',
-    packages=['statsext', 'mktdata'],
+    packages=['statsmodelsext', 'mktdata', 'mktdatadb', 'statsext', 'bollinger'],
     long_description=read('README.md'),
     install_requires=[
-        'google-api-python-client',
-        'pandas', 'scipy', 'numpy', 'statsmodels', 'mock', 'pytz', 'Quandl'
-    ],
+        'pandas', 'pytz', 'numpy', 'statsmodels', 'matplotlib', 'Quandl', 'scipy', 'xlsxwriter'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Topic :: Utilities',

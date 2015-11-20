@@ -78,8 +78,8 @@ if __name__ == '__main__':
     df = pandas.concat([(df1['bid'] + df1['ask']) / 2, (df2['bid'] + df2['ask']) / 2], axis=1).ffill()
     df.columns = ['HYG', 'JNK']
     cointegration = CoIntegration(df[df.index <= '2015-04-30'])
-    print 'half-life', cointegration.half_life
-    print
+    print('half-life', cointegration.half_life)
+    print()
     signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-20')].dot(cointegration.vector),
                               columns=['signal'])
 

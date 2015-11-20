@@ -4,6 +4,7 @@ import sys
 import pickle
 from datetime import datetime, timedelta
 
+import io
 import numpy
 import pandas
 
@@ -17,17 +18,12 @@ class TestCointegration(unittest.TestCase):
         cls._resources_path = os.sep.join(
             [os.path.dirname(current_module.__file__), 'resources'])
 
-    def load_resource(self, relative_path, loader=None):
-        resource = None
-        if loader is None:
-            loader = pickle.load
-
+    def load_resource(self, relative_path):
         resource_path = os.sep.join([self._resources_path, relative_path])
         resource_path_norm = os.path.abspath(resource_path)
-        with open(resource_path_norm, 'r') as resource_file:
-            resource = loader(resource_file)
-
-        return resource
+        with open(resource_path_norm, mode='rb') as resource_file:
+            resource = pickle.load(resource_file, encoding='latin1')
+            return resource
 
     def setUp(self):
         pass

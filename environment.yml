@@ -1,0 +1,30 @@
+name: C:\Users\Christophe\Miniconda2\envs\statarb
+dependencies:
+- jpeg=8d=vc10_0
+- libpng=1.6.17=vc10_1
+- libtiff=4.0.6=vc10_0
+- matplotlib=1.4.3=np110py34_3
+- msvc_runtime=1.0.1=vc10_0
+- numpy=1.10.1=py34_0
+- openssl=1.0.2d=vc10_0
+- pandas=0.17.0=np110py34_0
+- patsy=0.4.0=np110py34_0
+- pip=7.1.2=py34_0
+- pyparsing=2.0.3=py34_0
+- pyqt=4.11.4=py34_3
+- python=3.4.3=4
+- python-dateutil=2.4.2=py34_0
+- pytz=2015.7=py34_0
+- qt=4.8.7=vc10_4
+- quandl=2.8.9=py34_0
+- requests=2.8.1=py34_0
+- scipy=0.16.0=np110py34_0
+- setuptools=18.4=py34_0
+- sip=4.16.9=py34_2
+- six=1.10.0=py34_0
+- statsmodels=0.6.1=np110py34_0
+- tk=8.5.18=vc10_0
+- wheel=0.26.0=py34_1
+- xlsxwriter=0.7.7=py34_0
+- zlib=1.2.8=vc10_2
+

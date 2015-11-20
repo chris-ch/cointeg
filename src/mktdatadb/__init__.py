@@ -3,7 +3,7 @@ from decimal import Decimal
 import glob
 import logging
 import os
-from urllib import quote, unquote
+from urllib.parse import quote, unquote
 from zipfile import ZipFile
 from datetime import timedelta, datetime
 import itertools
@@ -66,11 +66,11 @@ def ticks_trades(ticker, start_time, end_time, db_name='equities'):
         yield trade[0], Decimal(trade[2]), int(Decimal(trade[3])), trade[4]
 
 
-def _pairwise(itr):
-    first, second = itertools.tee(itr)
-    second.next()  # remove first element of second
-    second = itertools.chain(second, [None])  # add final None
-    return itertools.izip(first, second)
+def _pairwise(iterable):
+    """s -> (s0,s1), (s1,s2), (s2, s3), ..."""
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 def _ticks_quotes(ticker, start_time, end_time, db_name='equities'):

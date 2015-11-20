@@ -5,7 +5,9 @@ from datetime import datetime
 from decimal import Decimal
 import gzip
 
-from mock import patch
+from unittest.mock import patch
+
+import io
 import pytz
 
 from mktdatadb import _ticks_quotes, _time_filter, load_book_states, load_tick_data, ON_TIME_NYSEARCA, TZ_NYSEARCA, \
@@ -17,7 +19,7 @@ def load_mktdata_func(filename):
         path_to_test_data = os.path.dirname(os.path.realpath(__file__))
         test_data_filename = os.sep.join([path_to_test_data, 'testdata', filename + '.csv.gz'])
         logging.info('loading test data file %s', test_data_filename)
-        with gzip.open(test_data_filename, 'r') as test_data:
+        with io.TextIOWrapper(gzip.open(test_data_filename, mode='r')) as test_data:
             for line in test_data.readlines():
                 if pattern in line:
                     parsed = line.strip().split(',')
