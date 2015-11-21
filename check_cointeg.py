@@ -45,7 +45,12 @@ class IrregularDatetimeFormatter(ticker.Formatter):
 
 
 class CoIntegration(object):
+    """
+
+    """
+
     def __init__(self, training_set):
+        training_set = training_set.ffill()
         cointeg_vectors = cointeg.get_johansen(training_set, lag=1)
         if len(cointeg_vectors) > 0:
             self._vector = cointeg_vectors[0]
@@ -70,62 +75,71 @@ class CoIntegration(object):
     def vector(self):
         return self._vector
 
+    def compute_signal(self, input_ts, start_date=None, end_date=None, name='signal'):
+        """
+
+        :param input_ts:
+        :param start_date: starting time range of input, included
+        :param end_date: ending time range of input, excluded
+        :param name:
+        :return:
+        """
+        input_ts_filter = input_ts.index >= '1980-01-01'  # hack
+        if start_date is not None:
+            input_ts_filter &= input_ts.index >= start_date
+
+        if end_date is not None:
+            input_ts_filter &= input_ts.index < end_date
+
+        by_day = input_ts[input_ts_filter].groupby([(pandas.TimeGrouper('D'))]).ffill()
+        return pandas.DataFrame(by_day.dot(self.vector), columns=[name]).dropna()
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
+    logging.info('loading datasets...')
     df1 = pandas.read_pickle(os.sep.join(['data', 'HYG.pkl'])).astype(float)
     df2 = pandas.read_pickle(os.sep.join(['data', 'JNK.pkl'])).astype(float)
-    df = pandas.concat([(df1['bid'] + df1['ask']) / 2, (df2['bid'] + df2['ask']) / 2], axis=1).ffill()
-    df.columns = ['HYG', 'JNK']
-    cointegration = CoIntegration(df[df.index <= '2015-04-30'])
-    print('half-life', cointegration.half_life)
-    print()
-    signal = pandas.DataFrame(df[(df.index >= '2015-05-01') & (df.index <= '2015-05-20')].dot(cointegration.vector),
-                              columns=['signal'])
-
+    logging.info('loaded datasets')
+    prices_mid = pandas.concat([(df1['bid'] + df1['ask']) / 2, (df2['bid'] + df2['ask']) / 2], axis=1)
+    prices_mid.columns = ['HYG', 'JNK']
+    logging.info('computing cointegration statistics')
+    cointegration = CoIntegration((prices_mid[(prices_mid.index >= '2015-04-01') & (prices_mid.index <= '2015-04-30')]))
+    logging.info('half-life according to warm-up period: %d', cointegration.half_life)
+    signal = cointegration.compute_signal(prices_mid, start_date='2015-05-13', end_date='2015-05-15', name='signal')
     formatter = IrregularDatetimeFormatter(signal.index.values)
 
-    fig, x_prices = pyplot.subplots()
-    x_prices.xaxis.set_major_formatter(formatter)
-    df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
-
-    #avg = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
-    avg = cointegration.calibration['signal'].mean()
-    threshold = 0.95 * cointegration.calibration['signal'].std()
+    #fig, x_prices = pyplot.subplots()
+    #x_prices.xaxis.set_major_formatter(formatter)
+    #df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
+    logging.info('computing ewma')
+    signal['ewma'] = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
+    #avg = cointegration.calibration['signal'].mean()
+    threshold = 0.8 * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
     cumul = {'current_scaling': 0.}
 
-    def scale(row, cumul=cumul):
+    def compute_scale(row, cumul=cumul):
         current_scaling = cumul['current_scaling']
-        price = row['signal']
-        new_position_scaling = get_position_scaling(price, current_scaling, avg, threshold)
+        signal_level = row['signal']
+        ewma = row['ewma']
+        new_position_scaling = get_position_scaling(signal_level, current_scaling, ewma, threshold)
         # updating for next step
         cumul['current_scaling'] = new_position_scaling
         result = {
-            'band_inf': avg + ((new_position_scaling + 1) * threshold),
-            'band_mid': avg + (new_position_scaling * threshold),
-            'band_sup': avg + ((new_position_scaling - 1) * threshold)
+            'band_inf': ewma + ((new_position_scaling - 1) * threshold),
+            'band_mid': ewma + (new_position_scaling * threshold),
+            'band_sup': ewma + ((new_position_scaling + 1) * threshold),
+            'scaling': new_position_scaling
         }
         return pandas.Series(result)
 
-    signal = pandas.concat([signal, signal.apply(scale, axis=1)], axis=1)
-    logging.info('finding crossing levels')
-
-    # compute threshold for going long and threshold for going short
-
-    logging.info('finding current crossing levels')
-
-    logging.info('writing results to output file')
+    signal = pandas.concat([signal, signal.apply(compute_scale, axis=1)], axis=1)
+    print(signal)
+    #logging.info('writing results to output file')
     writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
     signal.to_excel(writer, 'Sheet1')
     writer.save()
     fig, ax_signal = pyplot.subplots()
     ax_signal.xaxis.set_major_formatter(formatter)
     signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
-
-    # ref_level = pandas.DataFrame(((signal['signal'] - signal['average']) / threshold).astype('int'))
-    #fig, ax_ref_level = pyplot.subplots()
-    #ax_ref_level.xaxis.set_major_formatter(formatter)
-    #ref_level.plot(ax=ax_ref_level, x=numpy.arange(len(signal)))
-
     pyplot.show()
