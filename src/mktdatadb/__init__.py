@@ -183,6 +183,10 @@ def get_date_range(ticker, db_name):
 
 
 class LoaderARCA(object):
+    """
+    Loading equities from NYSE ARCA.
+    """
+
     def __init__(self):
         self._on_time = ON_TIME_NYSEARCA
         self._off_time = OFF_TIME_NYSEARCA

@@ -99,7 +99,14 @@ if __name__ == '__main__':
     logging.info('loading datasets...')
 
     SECURITIES = ['HYG', 'JNK']
-    TRADE_SCALE = 100.
+    TRADE_SCALE = 100.  # how many spreads to trades at a time
+    STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
+
+    CALIBRATION_START = '2015-04-01'  # included
+    CALIBRATION_END = '2015-05-01'  # excluded
+
+    BACKTEST_START = '2015-05-13'  # included
+    BACKTEST_END = '2015-05-15'  # excluded
 
     prices_bid_ask_list = list()
     prices_mid_list = list()
@@ -113,9 +120,9 @@ if __name__ == '__main__':
     prices_mid = pandas.concat(prices_mid_list, axis=1)
     prices_mid.columns = SECURITIES
     logging.info('computing cointegration statistics')
-    cointegration = CoIntegration((prices_mid[(prices_mid.index >= '2015-04-01') & (prices_mid.index <= '2015-04-30')]))
+    cointegration = CoIntegration((prices_mid[(prices_mid.index >= CALIBRATION_START) & (prices_mid.index < CALIBRATION_END)]))
     logging.info('half-life according to warm-up period: %d', cointegration.half_life)
-    signal = cointegration.compute_signal(prices_mid, start_date='2015-05-13', end_date='2015-05-15', name='signal')
+    signal = cointegration.compute_signal(prices_mid, start_date=BACKTEST_START, end_date=BACKTEST_END, name='signal')
 
     # fig, x_prices = pyplot.subplots()
     # x_prices.xaxis.set_major_formatter(formatter)
@@ -123,7 +130,7 @@ if __name__ == '__main__':
     logging.info('computing ewma')
     signal['ewma'] = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
 
-    threshold = 0.8 * cointegration.calibration['signal'].std()
+    threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
     cumul = {'current_scaling': 0.}
 
@@ -142,11 +149,14 @@ if __name__ == '__main__':
         }
         return pandas.Series(result)
 
+    logging.info('computing scaling')
     scales = signal.apply(compute_scale, axis=1)['scaling']
     shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
+
     components = list()
     for count, security in enumerate(SECURITIES):
+        logging.info('backtesting component: %s', security)
         prices = pandas.concat([prices_bid_ask_list[count]['bid'], prices_bid_ask_list[count]['ask']], axis=1)
         component = pandas.concat([prices, shares_df[security]], axis=1, join='inner')
         component.columns = ['bid', 'ask', 'shares']
@@ -154,6 +164,7 @@ if __name__ == '__main__':
 
     components_trades = list()
     for count, component in enumerate(components):
+        logging.info('analyzing trades for component: %s', SECURITIES[count])
         trades = component[['shares']].diff()
         trades.ix[0] = component['shares'].ix[0]
         trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
@@ -171,8 +182,8 @@ if __name__ == '__main__':
         components_trades.append(trades)
 
     for count, trades in enumerate(components_trades):
-        print(SECURITIES[count])
-        print(trades.round(2))
+        logging.info('displaying results for component %s', SECURITIES[count])
+        logging.info('trades:\n%s', trades)
 
         # logging.info('writing results to output file')
         # writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
