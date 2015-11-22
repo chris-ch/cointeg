@@ -62,8 +62,8 @@ class TestCointegration(unittest.TestCase):
         numpy.testing.assert_almost_equal(v1, expected_v1)
         expected_v2 = numpy.array([-2.3183438, 4.6361944, -1.])
         numpy.testing.assert_almost_equal(v2, expected_v2)
-        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v1), significance='10%'))
-        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.as_matrix(), v2), significance='10%'))
+        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.values, v1), significance='10%'))
+        self.assertFalse(cointeg.is_not_stationary(numpy.dot(y.values, v2), significance='10%'))
 
 
 if __name__ == '__main__':

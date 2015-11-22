@@ -143,7 +143,7 @@ if __name__ == '__main__':
         return pandas.Series(result)
 
     scales = signal.apply(compute_scale, axis=1)['scaling']
-    shares = (scales.as_matrix() * cointegration.vector[:, None] * 100.).astype(int)
+    shares = (scales.values * cointegration.vector[:, None] * 100.).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
     components = list()
     for count, security in enumerate(SECURITIES):
