@@ -94,19 +94,57 @@ class CoIntegration(object):
         return pandas.DataFrame(by_day.dot(self.vector), columns=[name]).dropna()
 
 
-if __name__ == '__main__':
-    logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
+def fixed_apply(df, func):
+    """
+    Workaround for issue https://github.com/pydata/pandas/issues/11675
+    :param df:
+    :param func:
+    :return:
+    """
+    reset_df = df.reset_index()
+    reset_df['index'] = pandas.to_datetime(reset_df['index'])
+    fixed_df = reset_df.apply(func, axis=1)
+    fixed_df.index = reset_df['index']
+    return fixed_df
+
+
+def compute_trades(components, securities):
+    components_trades = list()
+    for count, component in enumerate(components):
+        logging.info('analyzing trades for component: %s', securities[count])
+        trades = component[['shares']].diff()
+        trades.ix[0] = component['shares'].ix[0]
+        trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
+        trades = trades[trades['shares'] != 0]
+        update_pnl_global = {'pnl_calc': AverageCostProfitAndLoss()}
+
+        def update_pnl(row):
+            logging.info('updating pnl for row:\n%s', row)
+            pnl_calc = update_pnl_global['pnl_calc']
+            pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
+            results = {'realized': pnl_calc.realized_pnl,
+                       'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
+            return pandas.Series(results)
+
+        trades = pandas.concat([trades, fixed_apply(trades, update_pnl)], axis=1)
+        components_trades.append(trades)
+
+    return components_trades
+
+
+def main():
     logging.info('loading datasets...')
 
     SECURITIES = ['HYG', 'JNK']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
     STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
+    EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
 
     CALIBRATION_START = '2015-04-01'  # included
     CALIBRATION_END = '2015-05-01'  # excluded
 
-    BACKTEST_START = '2015-05-13'  # included
-    BACKTEST_END = '2015-05-15'  # excluded
+    BACKTEST_START = '2015-05-01'  # included
+    BACKTEST_END = '2015-06-01'  # excluded
 
     prices_bid_ask_list = list()
     prices_mid_list = list()
@@ -120,7 +158,8 @@ if __name__ == '__main__':
     prices_mid = pandas.concat(prices_mid_list, axis=1)
     prices_mid.columns = SECURITIES
     logging.info('computing cointegration statistics')
-    cointegration = CoIntegration((prices_mid[(prices_mid.index >= CALIBRATION_START) & (prices_mid.index < CALIBRATION_END)]))
+    cointegration = CoIntegration(
+        (prices_mid[(prices_mid.index >= CALIBRATION_START) & (prices_mid.index < CALIBRATION_END)]))
     logging.info('half-life according to warm-up period: %d', cointegration.half_life)
     signal = cointegration.compute_signal(prices_mid, start_date=BACKTEST_START, end_date=BACKTEST_END, name='signal')
 
@@ -128,7 +167,7 @@ if __name__ == '__main__':
     # x_prices.xaxis.set_major_formatter(formatter)
     # df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
     logging.info('computing ewma')
-    signal['ewma'] = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
+    signal['ewma'] = pandas.ewma(signal['signal'], halflife=EWMA_PERIOD * cointegration.half_life)
 
     threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
@@ -162,24 +201,7 @@ if __name__ == '__main__':
         component.columns = ['bid', 'ask', 'shares']
         components.append(component)
 
-    components_trades = list()
-    for count, component in enumerate(components):
-        logging.info('analyzing trades for component: %s', SECURITIES[count])
-        trades = component[['shares']].diff()
-        trades.ix[0] = component['shares'].ix[0]
-        trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
-        trades = trades[trades['shares'] != 0]
-
-        pnl_calc = AverageCostProfitAndLoss()
-
-        def update_pnl(row, pnl_calc=pnl_calc):
-            pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
-            results = {'realized': pnl_calc.realized_pnl,
-                       'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
-            return pandas.Series(results)
-
-        trades = pandas.concat([trades, trades.apply(update_pnl, axis=1)], axis=1)
-        components_trades.append(trades)
+    components_trades = compute_trades(components, SECURITIES)
 
     for count, trades in enumerate(components_trades):
         logging.info('displaying results for component %s', SECURITIES[count])
@@ -194,3 +216,8 @@ if __name__ == '__main__':
         # ax_signal.xaxis.set_major_formatter(formatter)
         # signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
         # pyplot.show()
+
+
+if __name__ == '__main__':
+    logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
+    main()

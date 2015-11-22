@@ -1,3 +1,4 @@
+import logging
 import math
 
 
@@ -45,6 +46,7 @@ class AverageCostProfitAndLoss(object):
         :param fees: a dict containing fees that apply on the trade
         :return:
         """
+        logging.debug('adding fill: %s at %s', fill_qty, fill_price)
         old_qty = self._quantity
         old_cost = self._cost
         old_realized = self._realized_pnl

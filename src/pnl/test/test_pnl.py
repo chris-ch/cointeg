@@ -148,5 +148,20 @@ class TestProfitAndLoss(unittest.TestCase):
         self.assertAlmostEqual(-3., pos.get_unrealized_pnl(101.))
         self.assertAlmostEqual(49., pos.get_total_pnl(101.))
 
+    def test_jnk(self):
+        pos = AverageCostProfitAndLoss()
+        pos.add_fill(203, 38.7556)
+        self.assertAlmostEqual(pos.realized_pnl, 0.)
+        self.assertAlmostEqual(pos.get_unrealized_pnl(38.7556), 0.)
+        pos.add_fill(-203, 38.7654)
+        self.assertAlmostEqual(pos.realized_pnl, 1.989400)
+        self.assertAlmostEqual(pos.get_unrealized_pnl(38.7654), 0.)
+        pos.add_fill(-203, 38.7950)
+        self.assertAlmostEqual(pos.realized_pnl, 0.)
+        self.assertAlmostEqual(pos.get_unrealized_pnl(38.7950), 0.)
+        pos.add_fill(203, 38.8443)
+        self.assertAlmostEqual(pos.realized_pnl, 203. * (38.7950 - 38.8443))
+        self.assertAlmostEqual(pos.get_unrealized_pnl(38.8443), 0.)
+
 if __name__ == '__main__':
     unittest.main()
