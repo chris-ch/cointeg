@@ -9,9 +9,8 @@ from statsmodels.formula.api import ols
 import math
 from bollinger import get_position_scaling
 from mktdatadb import list_tickers, LoaderARCA, get_date_range
-
+from pnl import AverageCostProfitAndLoss
 from statsext import cointeg
-
 
 __author__ = 'Christophe'
 
@@ -94,13 +93,14 @@ class CoIntegration(object):
         by_day = input_ts[input_ts_filter].groupby([(pandas.TimeGrouper('D'))]).ffill()
         return pandas.DataFrame(by_day.dot(self.vector), columns=[name]).dropna()
 
+
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     logging.info('loading datasets...')
 
     SECURITIES = ['HYG', 'JNK']
-    POSITION_SCALE = 10.
-    
+    TRADE_SCALE = 100.
+
     prices_bid_ask_list = list()
     prices_mid_list = list()
     for security in SECURITIES:
@@ -117,9 +117,9 @@ if __name__ == '__main__':
     logging.info('half-life according to warm-up period: %d', cointegration.half_life)
     signal = cointegration.compute_signal(prices_mid, start_date='2015-05-13', end_date='2015-05-15', name='signal')
 
-    #fig, x_prices = pyplot.subplots()
-    #x_prices.xaxis.set_major_formatter(formatter)
-    #df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
+    # fig, x_prices = pyplot.subplots()
+    # x_prices.xaxis.set_major_formatter(formatter)
+    # df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
     logging.info('computing ewma')
     signal['ewma'] = pandas.ewma(signal['signal'], halflife=cointegration.half_life)
 
@@ -138,32 +138,48 @@ if __name__ == '__main__':
             'band_inf': ewma + ((new_position_scaling - 1) * threshold),
             'band_mid': ewma + (new_position_scaling * threshold),
             'band_sup': ewma + ((new_position_scaling + 1) * threshold),
-            'scaling': int(new_position_scaling * POSITION_SCALE)
+            'scaling': new_position_scaling
         }
         return pandas.Series(result)
 
     scales = signal.apply(compute_scale, axis=1)['scaling']
-    shares = (scales.values * cointegration.vector[:, None] * 100.).astype(int)
+    shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
     components = list()
     for count, security in enumerate(SECURITIES):
         prices = pandas.concat([prices_bid_ask_list[count]['bid'], prices_bid_ask_list[count]['ask']], axis=1)
         component = pandas.concat([prices, shares_df[security]], axis=1, join='inner')
         component.columns = ['bid', 'ask', 'shares']
-        component['value'] = component['bid'].where(component['shares'] < 0, component['ask']) * component['shares']
         components.append(component)
 
+    components_trades = list()
     for count, component in enumerate(components):
+        trades = component[['shares']].diff()
+        trades.ix[0] = component['shares'].ix[0]
+        trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
+        trades = trades[trades['shares'] != 0]
+
+        pnl_calc = AverageCostProfitAndLoss()
+
+        def update_pnl(row, pnl_calc=pnl_calc):
+            pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
+            results = {'realized': pnl_calc.realized_pnl,
+                       'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
+            return pandas.Series(results)
+
+        trades = pandas.concat([trades, trades.apply(update_pnl, axis=1)], axis=1)
+        components_trades.append(trades)
+
+    for count, trades in enumerate(components_trades):
         print(SECURITIES[count])
-        print(component[component['value'] != 0])
+        print(trades.round(2))
 
-
-    #logging.info('writing results to output file')
-    #writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
-    #signal.to_excel(writer, 'Sheet1')
-    #writer.save()
-    #fig, ax_signal = pyplot.subplots()
-    #formatter = IrregularDatetimeFormatter(signal.index.values)
-    #ax_signal.xaxis.set_major_formatter(formatter)
-    #signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
-    #pyplot.show()
+        # logging.info('writing results to output file')
+        # writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
+        # signal.to_excel(writer, 'Sheet1')
+        # writer.save()
+        # fig, ax_signal = pyplot.subplots()
+        # formatter = IrregularDatetimeFormatter(signal.index.values)
+        # ax_signal.xaxis.set_major_formatter(formatter)
+        # signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
+        # pyplot.show()

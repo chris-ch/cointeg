@@ -36,12 +36,13 @@ class AverageCostProfitAndLoss(object):
     def get_total_pnl(self, current_price):
         return self.realized_pnl + self.get_unrealized_pnl(current_price)
 
-    def add_fill(self, fill_qty, fill_price):
+    def add_fill(self, fill_qty, fill_price, fees=None):
         """
         Adding a fill to the record updates the P&L values.
 
         :param fill_qty:
         :param fill_price:
+        :param fees: a dict containing fees that apply on the trade
         :return:
         """
         old_qty = self._quantity
