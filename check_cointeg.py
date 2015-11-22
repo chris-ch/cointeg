@@ -15,17 +15,19 @@ from statsext import cointeg
 __author__ = 'Christophe'
 
 
-def save_sample():
+def save_samples(ticker1, ticker2):
+    ticker1 = ticker1.upper()
+    ticker2 = ticker2.upper()
     for ticker in list_tickers('equities'):
         logging.info('available data for %s, %s', ticker, get_date_range(ticker, 'equities'))
 
     nyse_arca = LoaderARCA()
     start_date = datetime(2015, 4, 1)
     end_date = datetime(2015, 5, 31)
-    book_states = nyse_arca.load_book_states('HYG US Equity', start_date, end_date)
-    book_states.to_pickle('HYG.pkl')
-    book_states = nyse_arca.load_book_states('JNK US Equity', start_date, end_date)
-    book_states.to_pickle('JNK.pkl')
+    book_states = nyse_arca.load_book_states('%s US Equity' % ticker1, start_date, end_date)
+    book_states.to_pickle('%s.pkl' % ticker1)
+    book_states = nyse_arca.load_book_states('%s US Equity' % ticker2, start_date, end_date)
+    book_states.to_pickle('%s.pkl' % ticker2)
 
 
 class IrregularDatetimeFormatter(ticker.Formatter):
@@ -119,7 +121,6 @@ def compute_trades(components, securities):
         update_pnl_global = {'pnl_calc': AverageCostProfitAndLoss()}
 
         def update_pnl(row):
-            logging.info('updating pnl for row:\n%s', row)
             pnl_calc = update_pnl_global['pnl_calc']
             pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
             results = {'realized': pnl_calc.realized_pnl,
@@ -135,7 +136,7 @@ def compute_trades(components, securities):
 def main():
     logging.info('loading datasets...')
 
-    SECURITIES = ['HYG', 'JNK']
+    SECURITIES = ['EWA', 'EWC']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
     STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
     EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
@@ -163,9 +164,6 @@ def main():
     logging.info('half-life according to warm-up period: %d', cointegration.half_life)
     signal = cointegration.compute_signal(prices_mid, start_date=BACKTEST_START, end_date=BACKTEST_END, name='signal')
 
-    # fig, x_prices = pyplot.subplots()
-    # x_prices.xaxis.set_major_formatter(formatter)
-    # df.plot(ax=x_prices, x=numpy.arange(len(df)), subplots=True)
     logging.info('computing ewma')
     signal['ewma'] = pandas.ewma(signal['signal'], halflife=EWMA_PERIOD * cointegration.half_life)
 
@@ -189,7 +187,8 @@ def main():
         return pandas.Series(result)
 
     logging.info('computing scaling')
-    scales = signal.apply(compute_scale, axis=1)['scaling']
+    bands = signal.apply(compute_scale, axis=1)
+    scales = bands['scaling']
     shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
 
@@ -207,17 +206,19 @@ def main():
         logging.info('displaying results for component %s', SECURITIES[count])
         logging.info('trades:\n%s', trades)
 
-        # logging.info('writing results to output file')
-        # writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
-        # signal.to_excel(writer, 'Sheet1')
-        # writer.save()
-        # fig, ax_signal = pyplot.subplots()
-        # formatter = IrregularDatetimeFormatter(signal.index.values)
-        # ax_signal.xaxis.set_major_formatter(formatter)
-        # signal.plot(ax=ax_signal, x=numpy.arange(len(signal)))
-        # pyplot.show()
+    # logging.info('writing results to output file')
+    # writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
+    # signal.to_excel(writer, 'Sheet1')
+    # writer.save()
+    fig, ax_signal = pyplot.subplots()
+    formatter = IrregularDatetimeFormatter(signal.index.values)
+    ax_signal.xaxis.set_major_formatter(formatter)
+    # todo: use scales for transparent overlay
+    pandas.concat([signal, bands], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(signal)))
+    pyplot.show()
 
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     main()
+    #save_samples('EWA', 'EWC')

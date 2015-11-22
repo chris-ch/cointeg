@@ -50,11 +50,12 @@ def _ticks_from_zip(ticker, start_time, end_time, db_name, pattern='BEST'):
         for current_date in _date_range(start_date, end_date):
             current_file = current_date.strftime('%Y%m%d') + '.csv'
             if current_file not in files_list:
-                logging.warn('source file %s not found: ignoring', current_file)
+                logging.warning('source file %s not found: ignoring', current_file)
                 continue
 
-            with zip_ticks.open(current_file, 'r') as ticks_file:
+            with zip_ticks.open(current_file, mode='r') as ticks_file:
                 for line in ticks_file:
+                    line = line.decode('UTF-8')
                     if pattern in line:
                         parsed = line.strip().split(',')
                         yield parsed
@@ -208,6 +209,6 @@ class LoaderARCA(object):
         book_states = load_book_states(ticker, start_date, end_date, self._on_time, self._off_time, self._timezone)
         df = pandas.DataFrame.from_dict(list(book_states))
         df['ts'] = pandas.to_datetime(df['ts'])
-        df.drop_duplicates(subset='ts', take_last=True, inplace=True)
+        df.drop_duplicates(subset='ts', keep='last', inplace=True)
         df.set_index('ts', inplace=True)
         return df
