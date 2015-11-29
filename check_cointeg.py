@@ -103,11 +103,11 @@ def fixed_apply(df, func):
     :param func:
     :return:
     """
-    reset_df = df.reset_index()
-    reset_df['index'] = pandas.to_datetime(reset_df['index'])
-    fixed_df = reset_df.apply(func, axis=1)
-    fixed_df.index = reset_df['index']
-    return fixed_df
+    result = list()
+    for row in df.itertuples(index=False):
+        result.append(func(dict(zip(df.columns, row))))
+
+    return pandas.DataFrame(result, index=df.index)
 
 
 def compute_trades(components, securities):
@@ -118,10 +118,10 @@ def compute_trades(components, securities):
         trades.ix[0] = component['shares'].ix[0]
         trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
         trades = trades[trades['shares'] != 0]
-        update_pnl_global = {'pnl_calc': AverageCostProfitAndLoss()}
+        update_pnl_globals = {'pnl_calc': AverageCostProfitAndLoss()}
 
         def update_pnl(row):
-            pnl_calc = update_pnl_global['pnl_calc']
+            pnl_calc = update_pnl_globals['pnl_calc']
             pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
             results = {'realized': pnl_calc.realized_pnl,
                        'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
@@ -138,7 +138,7 @@ def main():
 
     SECURITIES = ['EWA', 'EWC']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
-    STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
+    STEP_SIZE = 0.5  # variation that triggers a trade in terms of std dev
     EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
 
     CALIBRATION_START = '2015-04-01'  # included
@@ -164,30 +164,32 @@ def main():
     logging.info('half-life according to warm-up period: %d', cointegration.half_life)
     signal = cointegration.compute_signal(prices_mid, start_date=BACKTEST_START, end_date=BACKTEST_END, name='signal')
 
+    signal.resample('10T', how='last')
+
     logging.info('computing ewma')
     signal['ewma'] = pandas.ewma(signal['signal'], halflife=EWMA_PERIOD * cointegration.half_life)
 
     threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
-    cumul = {'current_scaling': 0.}
+    compute_scale_globals = {'current_scaling': 0.}
 
-    def compute_scale(row, cumul=cumul):
-        current_scaling = cumul['current_scaling']
+    def compute_scale(row):
+        current_scaling = compute_scale_globals['current_scaling']
         signal_level = row['signal']
         ewma = row['ewma']
         new_position_scaling = get_position_scaling(signal_level, current_scaling, ewma, threshold)
         # updating for next step
-        cumul['current_scaling'] = new_position_scaling
+        compute_scale_globals['current_scaling'] = new_position_scaling
         result = {
             'band_inf': ewma + ((new_position_scaling - 1) * threshold),
             'band_mid': ewma + (new_position_scaling * threshold),
             'band_sup': ewma + ((new_position_scaling + 1) * threshold),
             'scaling': new_position_scaling
         }
-        return pandas.Series(result)
+        return result
 
     logging.info('computing scaling')
-    bands = signal.apply(compute_scale, axis=1)
+    bands = fixed_apply(signal, compute_scale)
     scales = bands['scaling']
     shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
@@ -213,8 +215,7 @@ def main():
     fig, ax_signal = pyplot.subplots()
     formatter = IrregularDatetimeFormatter(signal.index.values)
     ax_signal.xaxis.set_major_formatter(formatter)
-    # todo: use scales for transparent overlay
-    pandas.concat([signal, bands], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(signal)))
+    pandas.concat([signal, bands.drop(['scaling'], axis=1)], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(signal)))
     pyplot.show()
 
 
