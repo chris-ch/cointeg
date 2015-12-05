@@ -146,9 +146,24 @@ def backtest(prices_mid_securities, calibration_start, calibration_end, backtest
     return cointegration
 
 
-def bollinger(signal, threshold, half_life):
+def bollinger(signal, threshold, half_life=None, ref_value=0.):
+    """
+
+    :param signal:
+    :param threshold:
+    :param half_life:
+    :param ref_value:
+    :return:
+    """
     logging.info('computing ewma')
-    signal_ewma = pandas.ewma(signal, halflife=half_life)
+    if half_life:
+        signal_ref = pandas.ewma(signal, halflife=half_life)
+
+    else:
+        ref = numpy.empty(len(signal))
+        ref.fill(ref_value)
+        signal_ref = pandas.Series(ref, index=signal.index)
+
     compute_scale_globals = {'current_scaling': 0.}
 
     def compute_scale(signal_level, ewma_level):
@@ -160,14 +175,14 @@ def bollinger(signal, threshold, half_life):
             'band_inf': ewma_level + ((new_position_scaling - 1) * threshold),
             'band_mid': ewma_level + (new_position_scaling * threshold),
             'band_sup': ewma_level + ((new_position_scaling + 1) * threshold),
-            'scaling': new_position_scaling
+            'scaling': -new_position_scaling
         }
         return result
 
     logging.info('computing scaling')
 
     result = list()
-    for signal_level, ewma_level in pandas.concat([signal, signal_ewma], axis=1).itertuples(index=False):
+    for signal_level, ewma_level in pandas.concat([signal, signal_ref], axis=1).itertuples(index=False):
         result.append(compute_scale(signal_level, ewma_level))
 
     bands = pandas.DataFrame(result, index=signal.index)
@@ -177,9 +192,9 @@ def bollinger(signal, threshold, half_life):
 def main():
     logging.info('loading datasets...')
 
-    SECURITIES = ['EWA', 'EWC', 'GDX']
+    SECURITIES = ['EWA', 'EWC', 'GDX', 'USO']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
-    STEP_SIZE = 1.  # variation that triggers a trade in terms of std dev
+    STEP_SIZE = 2.  # variation that triggers a trade in terms of std dev
     EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
 
     CALIBRATION_START = '2015-04-01'  # included
@@ -202,7 +217,8 @@ def main():
     threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
 
-    bands, scaling = bollinger(cointegration.signal, threshold, half_life=EWMA_PERIOD * cointegration.half_life)
+    #bands, scaling = bollinger(cointegration.signal, threshold, half_life=EWMA_PERIOD * cointegration.half_life)
+    bands, scaling = bollinger(cointegration.signal, threshold, ref_value=cointegration.calibration['signal'].mean())
 
     shares = (scaling.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scaling.index], columns=SECURITIES)
