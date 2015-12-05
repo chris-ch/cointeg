@@ -192,7 +192,7 @@ def bollinger(signal, threshold, half_life=None, ref_value=0.):
 def main():
     logging.info('loading datasets...')
 
-    SECURITIES = ['EWA', 'EWC', 'GDX', 'USO']
+    SECURITIES = ['EWA', 'EWC', 'GDX']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
     STEP_SIZE = 2.  # variation that triggers a trade in terms of std dev
     EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
