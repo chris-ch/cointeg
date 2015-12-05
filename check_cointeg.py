@@ -15,6 +15,18 @@ from statsext import cointeg
 __author__ = 'Christophe'
 
 
+def save_sample(ticker):
+    ticker = ticker.upper()
+    for available_ticker in list_tickers('equities'):
+        logging.info('available data for %s, %s', available_ticker, get_date_range(available_ticker, 'equities'))
+
+    nyse_arca = LoaderARCA()
+    start_date = datetime(2015, 4, 1)
+    end_date = datetime(2015, 5, 31)
+    book_states = nyse_arca.load_book_states('%s US Equity' % ticker, start_date, end_date)
+    book_states.to_pickle('%s.pkl' % ticker)
+
+
 def save_samples(ticker1, ticker2):
     ticker1 = ticker1.upper()
     ticker2 = ticker2.upper()
@@ -97,31 +109,30 @@ class CoIntegration(object):
         return by_day.dot(self.vector).dropna()
 
 
-def compute_trades(components, securities):
-    components_trades = list()
-    for count, component in enumerate(components):
-        logging.info('analyzing trades for component: %s', securities[count])
-        trades = component[['shares']].diff()
-        trades.ix[0] = component['shares'].ix[0]
-        trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
-        trades = trades[trades['shares'] != 0]
-        update_pnl_globals = {'pnl_calc': AverageCostProfitAndLoss()}
+def compute_trades(component):
+    trades = component[['shares']].diff()
+    trades.ix[0] = component['shares'].ix[0]
+    trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
+    #trades = trades[trades['shares'] != 0]
+    update_pnl_globals = {'pnl_calc': AverageCostProfitAndLoss()}
 
-        def update_pnl(row):
-            pnl_calc = update_pnl_globals['pnl_calc']
+    def update_pnl(row):
+        pnl_calc = update_pnl_globals['pnl_calc']
+        realized_pnl = 0.
+        if row['shares'] != 0:
             pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
-            results = {'realized': pnl_calc.realized_pnl,
-                       'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
-            return pandas.Series(results)
+            realized_pnl = pnl_calc.realized_pnl
 
-        result = list()
-        for row in trades.itertuples(index=False):
-            result.append(update_pnl(dict(zip(trades.columns, row))))
+        unrealized_pnl = pnl_calc.get_unrealized_pnl(current_price=row['cost'])
+        return pandas.Series({'trade_realized': realized_pnl, 'unrealized': unrealized_pnl})
 
-        trades = pandas.concat([trades, pandas.DataFrame(result, index=trades.index)], axis=1)
-        components_trades.append(trades)
+    result = list()
+    for row in trades.itertuples(index=False):
+        result.append(update_pnl(dict(zip(trades.columns, row))))
 
-    return components_trades
+    trades = pandas.concat([trades, pandas.DataFrame(result, index=trades.index)], axis=1)
+    trades['realized'] = trades['trade_realized'].cumsum()
+    return trades[['realized', 'unrealized']]
 
 
 def backtest(prices_mid_securities, calibration_start, calibration_end, backtest_end):
@@ -135,36 +146,9 @@ def backtest(prices_mid_securities, calibration_start, calibration_end, backtest
     return cointegration
 
 
-def main():
-    logging.info('loading datasets...')
-
-    SECURITIES = ['EWA', 'EWC']
-    TRADE_SCALE = 100.  # how many spreads to trades at a time
-    STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
-    EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
-
-    CALIBRATION_START = '2015-04-01'  # included
-    CALIBRATION_END = '2015-05-01'  # excluded
-    BACKTEST_END = '2015-06-01'  # excluded
-
-    prices_bid_ask_list = list()
-    prices_mid_securities = dict()
-    for security in SECURITIES:
-        quote = pandas.read_pickle(os.sep.join(['data', '%s.pkl' % security])).astype(float)
-        prices_bid_ask_list.append(quote)
-        quote_mid = 0.5 * (quote['bid'] + quote['ask'])
-        prices_mid_securities[security] = quote_mid
-
-    logging.info('loaded datasets')
-    cointegration = backtest(prices_mid_securities, CALIBRATION_START, CALIBRATION_END, BACKTEST_END)
-
-    #signal.resample('10T', how='last')
-
+def bollinger(signal, threshold, half_life):
     logging.info('computing ewma')
-    signal_ewma = pandas.ewma(cointegration.signal, halflife=EWMA_PERIOD * cointegration.half_life)
-
-    threshold = STEP_SIZE * cointegration.calibration['signal'].std()
-    logging.info('size of threshold: %.2f', threshold)
+    signal_ewma = pandas.ewma(signal, halflife=half_life)
     compute_scale_globals = {'current_scaling': 0.}
 
     def compute_scale(signal_level, ewma_level):
@@ -183,29 +167,63 @@ def main():
     logging.info('computing scaling')
 
     result = list()
-
-    for signal_level, ewma_level in pandas.concat([cointegration.signal, signal_ewma], axis=1).itertuples(index=False):
+    for signal_level, ewma_level in pandas.concat([signal, signal_ewma], axis=1).itertuples(index=False):
         result.append(compute_scale(signal_level, ewma_level))
 
-    bands = pandas.DataFrame(result, index=cointegration.signal.index)
-    scales = bands['scaling']
-    shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
-    shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
+    bands = pandas.DataFrame(result, index=signal.index)
+    return bands[['band_inf', 'band_mid', 'band_sup']], bands['scaling']
 
-    components = list()
-    for count, security in enumerate(SECURITIES):
+
+def main():
+    logging.info('loading datasets...')
+
+    SECURITIES = ['EWA', 'EWC', 'GDX']
+    TRADE_SCALE = 100.  # how many spreads to trades at a time
+    STEP_SIZE = 1.  # variation that triggers a trade in terms of std dev
+    EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
+
+    CALIBRATION_START = '2015-04-01'  # included
+    CALIBRATION_END = '2015-05-01'  # excluded
+    BACKTEST_END = '2015-06-01'  # excluded
+
+    prices_bid_ask_securities = dict()
+    prices_mid_securities = dict()
+    for security in SECURITIES:
+        quote = pandas.read_pickle(os.sep.join(['data', '%s.pkl' % security])).astype(float)
+        prices_bid_ask_securities[security] = quote
+        quote_mid = 0.5 * (quote['bid'] + quote['ask'])
+        prices_mid_securities[security] = quote_mid
+
+    logging.info('loaded datasets')
+    cointegration = backtest(prices_mid_securities, CALIBRATION_START, CALIBRATION_END, BACKTEST_END)
+
+    #signal.resample('10T', how='last')
+
+    threshold = STEP_SIZE * cointegration.calibration['signal'].std()
+    logging.info('size of threshold: %.2f', threshold)
+
+    bands, scaling = bollinger(cointegration.signal, threshold, half_life=EWMA_PERIOD * cointegration.half_life)
+
+    shares = (scaling.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
+    shares_df = pandas.DataFrame(shares.transpose(), index=[scaling.index], columns=SECURITIES)
+
+    pnl_securities = dict()
+    for security in SECURITIES:
         logging.info('backtesting component: %s', security)
-        prices = pandas.concat([prices_bid_ask_list[count]['bid'], prices_bid_ask_list[count]['ask']], axis=1)
+        prices = pandas.concat([prices_bid_ask_securities[security]['bid'], prices_bid_ask_securities[security]['ask']], axis=1)
         component = pandas.concat([prices, shares_df[security]], axis=1, join='inner')
         component.columns = ['bid', 'ask', 'shares']
-        components.append(component)
-
-    components_trades = compute_trades(components, SECURITIES)
-
-    for count, trades in enumerate(components_trades):
-        logging.info('displaying results for component %s', SECURITIES[count])
-        # join with prices and cumulate
+        logging.info('analyzing trades for component: %s', security)
+        trades = compute_trades(component)
+        logging.info('displaying results for component %s', security)
         logging.info('trades:\n%s', trades)
+        pnl_securities[security] = trades['realized'] + trades['unrealized']
+
+    fig, ax_pnls = pyplot.subplots()
+    pnls = pandas.DataFrame(pandas.concat([trades for trades in pnl_securities.values()], axis=1, join='inner').sum(axis=1))
+    formatter = IrregularDatetimeFormatter(pnls.index.values)
+    ax_pnls.xaxis.set_major_formatter(formatter)
+    pnls.plot(ax=ax_pnls, x=numpy.arange(len(pnls)))
 
     # logging.info('writing results to output file')
     # writer = pandas.ExcelWriter('signal.test.xlsx', engine='xlsxwriter')
@@ -214,11 +232,11 @@ def main():
     fig, ax_signal = pyplot.subplots()
     formatter = IrregularDatetimeFormatter(cointegration.signal.index.values)
     ax_signal.xaxis.set_major_formatter(formatter)
-    pandas.concat([cointegration.signal, bands.drop(['scaling'], axis=1)], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(cointegration.signal)))
+    pandas.concat([cointegration.signal, bands], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(cointegration.signal)))
     pyplot.show()
 
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(name)s - %(message)s', level=logging.DEBUG)
     main()
-    #save_samples('EWA', 'EWC')
+    #save_sample('USO')
