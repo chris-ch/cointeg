@@ -47,15 +47,19 @@ class IrregularDatetimeFormatter(ticker.Formatter):
 
 class CoIntegration(object):
     """
-
+    Generates a cointegrated signal.
     """
 
-    def __init__(self, training_set):
-        training_set = training_set.ffill()
-        cointeg_vectors = cointeg.get_johansen(training_set, lag=1)
+    def __init__(self, prices, calibration_start, calibration_end, backtest_end):
+        calibration_period = (prices.index >= calibration_start) & (prices.index < calibration_end)
+        backtest_period = (prices.index >= calibration_end) & (prices.index < backtest_end)
+        calibration_set = prices[calibration_period].groupby([(pandas.TimeGrouper('D'))]).ffill().dropna(axis=0)
+        self._backtest_set = prices[backtest_period]
+        self._signal = None
+        cointeg_vectors = cointeg.get_johansen(calibration_set, lag=1)
         if len(cointeg_vectors) > 0:
             self._vector = cointeg_vectors[0]
-            self._calibration = pandas.DataFrame(training_set.dot(self._vector))
+            self._calibration = pandas.DataFrame(calibration_set.dot(self._vector))
             self._calibration.columns = ['signal']
             delta_calibration = self._calibration - self._calibration.shift(periods=1)
             delta_calibration.columns = ['dy']
@@ -76,38 +80,21 @@ class CoIntegration(object):
     def vector(self):
         return self._vector
 
-    def compute_signal(self, input_ts, start_date=None, end_date=None, name='signal'):
+    @property
+    def signal(self):
+        if self._signal is None:
+            self._signal = self._compute_signal(self._backtest_set)
+
+        return self._signal
+
+    def _compute_signal(self, input_ts):
         """
 
         :param input_ts:
-        :param start_date: starting time range of input, included
-        :param end_date: ending time range of input, excluded
-        :param name:
         :return:
         """
-        input_ts_filter = input_ts.index >= '1980-01-01'  # hack
-        if start_date is not None:
-            input_ts_filter &= input_ts.index >= start_date
-
-        if end_date is not None:
-            input_ts_filter &= input_ts.index < end_date
-
-        by_day = input_ts[input_ts_filter].groupby([(pandas.TimeGrouper('D'))]).ffill()
-        return pandas.DataFrame(by_day.dot(self.vector), columns=[name]).dropna()
-
-
-def fixed_apply(df, func):
-    """
-    Workaround for issue https://github.com/pydata/pandas/issues/11675
-    :param df:
-    :param func:
-    :return:
-    """
-    result = list()
-    for row in df.itertuples(index=False):
-        result.append(func(dict(zip(df.columns, row))))
-
-    return pandas.DataFrame(result, index=df.index)
+        by_day = input_ts.groupby([(pandas.TimeGrouper('D'))]).ffill()
+        return by_day.dot(self.vector).dropna()
 
 
 def compute_trades(components, securities):
@@ -127,10 +114,25 @@ def compute_trades(components, securities):
                        'unrealized': pnl_calc.get_unrealized_pnl(current_price=row['cost'])}
             return pandas.Series(results)
 
-        trades = pandas.concat([trades, fixed_apply(trades, update_pnl)], axis=1)
+        result = list()
+        for row in trades.itertuples(index=False):
+            result.append(update_pnl(dict(zip(trades.columns, row))))
+
+        trades = pandas.concat([trades, pandas.DataFrame(result, index=trades.index)], axis=1)
         components_trades.append(trades)
 
     return components_trades
+
+
+def backtest(prices_mid_securities, calibration_start, calibration_end, backtest_end):
+    securities = prices_mid_securities.keys()
+    prices_mid_list = [prices_mid_securities[security] for security in securities]
+    prices_mid = pandas.concat(prices_mid_list, axis=1)
+    prices_mid.columns = securities
+    logging.info('computing cointegration statistics')
+    cointegration = CoIntegration(prices_mid, calibration_start, calibration_end, backtest_end)
+    logging.info('half-life according to warm-up period: %d', cointegration.half_life)
+    return cointegration
 
 
 def main():
@@ -138,58 +140,54 @@ def main():
 
     SECURITIES = ['EWA', 'EWC']
     TRADE_SCALE = 100.  # how many spreads to trades at a time
-    STEP_SIZE = 0.5  # variation that triggers a trade in terms of std dev
+    STEP_SIZE = 0.95  # variation that triggers a trade in terms of std dev
     EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
 
     CALIBRATION_START = '2015-04-01'  # included
     CALIBRATION_END = '2015-05-01'  # excluded
-
-    BACKTEST_START = '2015-05-01'  # included
     BACKTEST_END = '2015-06-01'  # excluded
 
     prices_bid_ask_list = list()
-    prices_mid_list = list()
+    prices_mid_securities = dict()
     for security in SECURITIES:
         quote = pandas.read_pickle(os.sep.join(['data', '%s.pkl' % security])).astype(float)
         prices_bid_ask_list.append(quote)
         quote_mid = 0.5 * (quote['bid'] + quote['ask'])
-        prices_mid_list.append(quote_mid)
+        prices_mid_securities[security] = quote_mid
 
     logging.info('loaded datasets')
-    prices_mid = pandas.concat(prices_mid_list, axis=1)
-    prices_mid.columns = SECURITIES
-    logging.info('computing cointegration statistics')
-    cointegration = CoIntegration(
-        (prices_mid[(prices_mid.index >= CALIBRATION_START) & (prices_mid.index < CALIBRATION_END)]))
-    logging.info('half-life according to warm-up period: %d', cointegration.half_life)
-    signal = cointegration.compute_signal(prices_mid, start_date=BACKTEST_START, end_date=BACKTEST_END, name='signal')
+    cointegration = backtest(prices_mid_securities, CALIBRATION_START, CALIBRATION_END, BACKTEST_END)
 
-    signal.resample('10T', how='last')
+    #signal.resample('10T', how='last')
 
     logging.info('computing ewma')
-    signal['ewma'] = pandas.ewma(signal['signal'], halflife=EWMA_PERIOD * cointegration.half_life)
+    signal_ewma = pandas.ewma(cointegration.signal, halflife=EWMA_PERIOD * cointegration.half_life)
 
     threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
     compute_scale_globals = {'current_scaling': 0.}
 
-    def compute_scale(row):
+    def compute_scale(signal_level, ewma_level):
         current_scaling = compute_scale_globals['current_scaling']
-        signal_level = row['signal']
-        ewma = row['ewma']
-        new_position_scaling = get_position_scaling(signal_level, current_scaling, ewma, threshold)
+        new_position_scaling = get_position_scaling(signal_level, current_scaling, ewma_level, threshold)
         # updating for next step
         compute_scale_globals['current_scaling'] = new_position_scaling
         result = {
-            'band_inf': ewma + ((new_position_scaling - 1) * threshold),
-            'band_mid': ewma + (new_position_scaling * threshold),
-            'band_sup': ewma + ((new_position_scaling + 1) * threshold),
+            'band_inf': ewma_level + ((new_position_scaling - 1) * threshold),
+            'band_mid': ewma_level + (new_position_scaling * threshold),
+            'band_sup': ewma_level + ((new_position_scaling + 1) * threshold),
             'scaling': new_position_scaling
         }
         return result
 
     logging.info('computing scaling')
-    bands = fixed_apply(signal, compute_scale)
+
+    result = list()
+
+    for signal_level, ewma_level in pandas.concat([cointegration.signal, signal_ewma], axis=1).itertuples(index=False):
+        result.append(compute_scale(signal_level, ewma_level))
+
+    bands = pandas.DataFrame(result, index=cointegration.signal.index)
     scales = bands['scaling']
     shares = (scales.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scales.index], columns=SECURITIES)
@@ -206,6 +204,7 @@ def main():
 
     for count, trades in enumerate(components_trades):
         logging.info('displaying results for component %s', SECURITIES[count])
+        # join with prices and cumulate
         logging.info('trades:\n%s', trades)
 
     # logging.info('writing results to output file')
@@ -213,9 +212,9 @@ def main():
     # signal.to_excel(writer, 'Sheet1')
     # writer.save()
     fig, ax_signal = pyplot.subplots()
-    formatter = IrregularDatetimeFormatter(signal.index.values)
+    formatter = IrregularDatetimeFormatter(cointegration.signal.index.values)
     ax_signal.xaxis.set_major_formatter(formatter)
-    pandas.concat([signal, bands.drop(['scaling'], axis=1)], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(signal)))
+    pandas.concat([cointegration.signal, bands.drop(['scaling'], axis=1)], axis=1, join='inner').plot(ax=ax_signal, x=numpy.arange(len(cointegration.signal)))
     pyplot.show()
 
 
