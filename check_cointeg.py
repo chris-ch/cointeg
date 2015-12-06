@@ -68,6 +68,9 @@ class CoIntegration(object):
         calibration_set = prices[calibration_period].groupby([(pandas.TimeGrouper('D'))]).ffill().dropna(axis=0)
         self._backtest_set = prices[backtest_period]
         self._signal = None
+        self._calibration = None
+        self._half_life = None
+        self._vector = None
         cointeg_vectors = cointeg.get_johansen(calibration_set, lag=1)
         if len(cointeg_vectors) > 0:
             self._vector = cointeg_vectors[0]
@@ -109,19 +112,23 @@ class CoIntegration(object):
         return by_day.dot(self.vector).dropna()
 
 
+def calc_fees_cfd(quantity):
+    return max(1., 0.005 * quantity)
+
+
 def compute_trades(component):
     trades = component[['shares']].diff()
     trades.ix[0] = component['shares'].ix[0]
     trades['cost'] = component['bid'].where(component['shares'] < 0, component['ask'])
-    #trades = trades[trades['shares'] != 0]
     update_pnl_globals = {'pnl_calc': AverageCostProfitAndLoss()}
 
     def update_pnl(row):
         pnl_calc = update_pnl_globals['pnl_calc']
+        quantity = row['shares']
         realized_pnl = 0.
-        if row['shares'] != 0:
-            pnl_calc.add_fill(fill_qty=row['shares'], fill_price=row['cost'])
-            realized_pnl = pnl_calc.realized_pnl
+        if quantity != 0:
+            pnl_calc.add_fill(fill_qty=quantity, fill_price=row['cost'])
+            realized_pnl = pnl_calc.realized_pnl - calc_fees_cfd(quantity)
 
         unrealized_pnl = pnl_calc.get_unrealized_pnl(current_price=row['cost'])
         return pandas.Series({'trade_realized': realized_pnl, 'unrealized': unrealized_pnl})
@@ -192,10 +199,10 @@ def bollinger(signal, threshold, half_life=None, ref_value=0.):
 def main():
     logging.info('loading datasets...')
 
-    SECURITIES = ['EWA', 'EWC', 'GDX']
-    TRADE_SCALE = 100.  # how many spreads to trades at a time
-    STEP_SIZE = 2.  # variation that triggers a trade in terms of std dev
-    EWMA_PERIOD = 2.  # length of EWMA in terms of cointegration half-life
+    SECURITIES = ['EWA', 'EWC', 'GLD', 'USO']
+    TRADE_SCALE = 10.  # how many spreads to trades at a time
+    STEP_SIZE = 1.  # variation that triggers a trade in terms of std dev
+    EWMA_PERIOD = 10.  # length of EWMA in terms of cointegration half-life
 
     CALIBRATION_START = '2015-04-01'  # included
     CALIBRATION_END = '2015-05-01'  # excluded
@@ -217,8 +224,8 @@ def main():
     threshold = STEP_SIZE * cointegration.calibration['signal'].std()
     logging.info('size of threshold: %.2f', threshold)
 
-    #bands, scaling = bollinger(cointegration.signal, threshold, half_life=EWMA_PERIOD * cointegration.half_life)
-    bands, scaling = bollinger(cointegration.signal, threshold, ref_value=cointegration.calibration['signal'].mean())
+    bands, scaling = bollinger(cointegration.signal, threshold, half_life=EWMA_PERIOD * cointegration.half_life)
+    #bands, scaling = bollinger(cointegration.signal, threshold, ref_value=cointegration.calibration['signal'].mean())
 
     shares = (scaling.values * cointegration.vector[:, None] * TRADE_SCALE).astype(int)
     shares_df = pandas.DataFrame(shares.transpose(), index=[scaling.index], columns=SECURITIES)
