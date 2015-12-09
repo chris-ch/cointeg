@@ -1,8 +1,9 @@
 import logging
+from collections import defaultdict
 from random import random
 from time import sleep
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy
 
 
@@ -27,6 +28,7 @@ class Signal(object):
 
     @value.setter
     def value(self, ts_value):
+        logging.info('updated signal %s: %s', self._name, ts_value)
         self._timestamp, self._value = ts_value
         for block in self._blocks:
             block.on_update(self._timestamp, self)
@@ -49,6 +51,7 @@ class TransferBlock(object):
         assert block.output is not None, 'block signal undefined'
         assert len(self._inputs) < self._count_inputs
         self._inputs[input_name] = block.output
+        logging.info('chained block %s to %s', block, self)
         block.output.add_block(self)
 
     def attach(self, signal_name):
@@ -74,6 +77,9 @@ class TransferBlock(object):
     @property
     def dimension(self):
         return self._dimension
+
+    def __repr__(self):
+        return self._name
 
 
 class TransferId(TransferBlock):
@@ -103,38 +109,90 @@ TransferSampler = TransferId
 
 class Generator(TransferBlock):
 
-    def __init__(self, name, dimension):
+    def __init__(self, sequencer, name, dimension):
         super(Generator, self).__init__(name, count_inputs=0, dimension=dimension)
+        self._sequencer = sequencer
+        sequencer.register(self)
+
+    @property
+    def sequencer(self):
+        return self._sequencer
 
     def start(self):
-        self.output.update(numpy.empty(self.dimension))
+        pass
+
+    def sequencer_callback(self, seq_ts):
+        pass
 
 
-class RandomGenerator(Generator):
+class RandomRealtimeGenerator(Generator):
 
-    def __init__(self, name, dimension):
-        super(RandomGenerator, self).__init__(name, dimension=dimension)
+    def __init__(self, sequencer, name, dimension, count=10):
+        super(RandomRealtimeGenerator, self).__init__(sequencer, name, dimension=dimension)
+        self._count = count
 
     def start(self):
-        while True:
+        while self._count:
             gen_ts = datetime.now()
-            self.emit(gen_ts, numpy.array([random()] * self._dimension))
+            self.sequencer.expect(gen_ts, self.sequencer_callback)
             sleep(1)
+            self._count -= 1
 
+    def sequencer_callback(self, seq_ts):
+        value = numpy.array([random()] * self._dimension)
+        logging.info('emitting <%s, %s>', seq_ts, value)
+        self.emit(seq_ts, value)
+
+
+class StepGenerator(Generator):
+
+    def __init__(self, sequencer, name, step_time):
+        super(StepGenerator, self).__init__(sequencer, name, dimension=1)
+        self._step_time = step_time
+
+    def start(self):
+        self.sequencer.expect(self._step_time, self.sequencer_callback)
+
+    def sequencer_callback(self, seq_ts):
+        self.emit(seq_ts, 1)
+
+
+class StreamSequencer(object):
+
+    def __init__(self):
+        self._expecting = defaultdict(set)
+        self._generators = set()
+
+    def register(self, generator):
+        self._generators.add(generator)
+
+    def start(self):
+        for generator in self._generators:
+            generator.start()
+
+    def expect(self, sequencer_ts, callback):
+        self._expecting[sequencer_ts].add(callback)
+        next_deadline = min(self._expecting.keys())
+        next_callbacks_in_line = self._expecting[next_deadline]
+        for callback in next_callbacks_in_line:
+            callback(next_deadline)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-    g1 = RandomGenerator('g1', 4)
-    g1.attach('s1')
+    # b1 = TransferId('b1', 4)
+    # b1.chain(g1, 'input1')
+    # b1.attach('s2')
+    #
+    # b2 = TransferLogger('l1', 4)
+    # b2.chain(b1, 'input_logger')
+    #
+    # b3 = TransferLogger('l1', 4)
+    # b3.chain(b1, 'input_logger')
 
-    b1 = TransferId('b1', 4)
-    b1.chain(g1, 'input1')
-    b1.attach('s2')
-
-    b2 = TransferLogger('l1', 4)
-    b2.chain(b1, 'input_logger')
-
-    b3 = TransferLogger('l1', 4)
-    b3.chain(b1, 'input_logger')
-
-    g1.start()
+    seq = StreamSequencer()
+    gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4)
+    gen1.attach('s1')
+    #gen2 = StepGenerator(seq, 'step1', datetime.now() + timedelta(seconds=5))
+    l1 = TransferLogger('l1', 4)
+    l1.chain(gen1, 'gen1_logger')
+    seq.start()
