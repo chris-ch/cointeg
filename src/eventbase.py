@@ -112,17 +112,10 @@ class Generator(TransferBlock):
     def __init__(self, sequencer, name, dimension):
         super(Generator, self).__init__(name, count_inputs=0, dimension=dimension)
         self._sequencer = sequencer
-        sequencer.register(self)
 
     @property
     def sequencer(self):
         return self._sequencer
-
-    def start(self):
-        pass
-
-    def sequencer_callback(self, seq_ts):
-        pass
 
 
 class RandomRealtimeGenerator(Generator):
@@ -145,27 +138,12 @@ class RandomRealtimeGenerator(Generator):
             self._count -= 1
 
 
-
-class StepGenerator(Generator):
-
-    def __init__(self, sequencer, name, step_time):
-        super(StepGenerator, self).__init__(sequencer, name, dimension=1)
-        self._step_time = step_time
-
-    def start(self):
-        self.sequencer.expect(self._step_time, self.sequencer_callback)
-
-    def sequencer_callback(self, seq_ts):
-        self.emit(seq_ts, 1)
-
-
 class DictGenerator(Generator):
 
     def __init__(self, sequencer, name, dict_stream):
         super(DictGenerator, self).__init__(sequencer, name, dimension=1)
         self._dict_stream = dict_stream
-
-    def start(self):
+        
         def sequencer_callback(seq_ts):
             value = self._dict_stream[seq_ts]
             self.emit(seq_ts, value)
@@ -178,24 +156,19 @@ class StreamSequencer(object):
 
     def __init__(self):
         self._expecting = defaultdict(set)
-        self._generators = set()
-
-    def register(self, generator):
-        self._generators.add(generator)
-
+        
     def start(self):
-        for generator in self._generators:
-            generator.start()
-
+        while self._expecting:
+            next_deadline = min(self._expecting.keys())
+            next_callbacks_in_line = self._expecting[next_deadline]
+            for callback in next_callbacks_in_line:
+                callback(next_deadline)
+    
+            self._expecting.pop(next_deadline, None)
+        
     def expect(self, sequencer_ts, callback):
         logging.info('new expect received: %s', sequencer_ts)
         self._expecting[sequencer_ts].add(callback)
-        next_deadline = min(self._expecting.keys())
-        next_callbacks_in_line = self._expecting[next_deadline]
-        for callback in next_callbacks_in_line:
-            callback(next_deadline)
-            
-        self._expecting.pop(next_deadline, None)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
@@ -210,12 +183,12 @@ if __name__ == '__main__':
     # b3.chain(b1, 'input_logger')
 
     seq = StreamSequencer()
-    gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4, count=3)
-    gen1.attach('s1')
-    l1 = TransferLogger('l1', 4)
-    l1.chain(gen1, 'gen1_logger')
+    #gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4, count=3)
+    #gen1.attach('s1')
+    #l1 = TransferLogger('l1', 4)
+    #l1.chain(gen1, 'gen1_logger')
     
-    gen_stream = {
+    gen_stream1 = {
         datetime(2012, 1, 1): 1.,
         datetime(2013, 1, 1): 2.,
         datetime(2014, 1, 1): 3.,
@@ -223,9 +196,22 @@ if __name__ == '__main__':
         datetime(2016, 1, 1): 5.,
         datetime(2017, 1, 1): 6.,
     }
-    gen2 = DictGenerator(seq, 'gen2', gen_stream)
+    gen2 = DictGenerator(seq, 'gen2', gen_stream1)
     gen2.attach('s2')
     l2 = TransferLogger('l2', 4)
     l2.chain(gen2, 'gen2_logger')
+    
+    gen_stream2 = {
+        datetime(2012, 6, 1): 1.,
+        datetime(2013, 6, 1): 2.,
+        datetime(2014, 6, 1): 3.,
+        datetime(2015, 6, 1): 4.,
+        datetime(2016, 6, 1): 5.,
+        datetime(2017, 6, 1): 6.,
+    }
+    gen2 = DictGenerator(seq, 'gen2', gen_stream2)
+    gen2.attach('s3')
+    l3 = TransferLogger('l3', 4)
+    l3.chain(gen2, 'gen3_logger')
     
     seq.start()
