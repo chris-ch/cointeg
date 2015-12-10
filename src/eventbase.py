@@ -139,7 +139,7 @@ class RandomRealtimeGenerator(Generator):
             self._count -= 1
 
     def sequencer_callback(self, seq_ts):
-        value = numpy.array([random()] * self._dimension)
+        value = numpy.array(map(lambda f: f(), [random] * self._dimension))
         logging.info('emitting <%s, %s>', seq_ts, value)
         self.emit(seq_ts, value)
 
@@ -171,11 +171,14 @@ class StreamSequencer(object):
             generator.start()
 
     def expect(self, sequencer_ts, callback):
+        logging.info('new expect received: %s', sequencer_ts)
         self._expecting[sequencer_ts].add(callback)
         next_deadline = min(self._expecting.keys())
         next_callbacks_in_line = self._expecting[next_deadline]
         for callback in next_callbacks_in_line:
             callback(next_deadline)
+            
+        self._expecting.pop(next_deadline, None)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
@@ -190,7 +193,7 @@ if __name__ == '__main__':
     # b3.chain(b1, 'input_logger')
 
     seq = StreamSequencer()
-    gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4)
+    gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4, count=3)
     gen1.attach('s1')
     #gen2 = StepGenerator(seq, 'step1', datetime.now() + timedelta(seconds=5))
     l1 = TransferLogger('l1', 4)
