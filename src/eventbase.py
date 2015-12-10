@@ -202,12 +202,18 @@ if __name__ == '__main__':
     l2.chain(gen2, 'gen2_logger')
     
     gen_stream2 = {
-        datetime(2012, 6, 1): 1.,
-        datetime(2013, 6, 1): 2.,
-        datetime(2014, 6, 1): 3.,
-        datetime(2015, 6, 1): 4.,
-        datetime(2016, 6, 1): 5.,
-        datetime(2017, 6, 1): 6.,
+        datetime(2012, 4, 1): -1.,
+        datetime(2013, 4, 1): -2.,
+        datetime(2014, 4, 1): -3.,
+        datetime(2015, 4, 1): -4.,
+        datetime(2016, 4, 1): -5.,
+        datetime(2017, 4, 1): -6.,
+        datetime(2012, 8, 1): -1.5,
+        datetime(2013, 8, 1): -2.5,
+        datetime(2014, 8, 1): -3.5,
+        datetime(2015, 8, 1): -4.5,
+        datetime(2016, 8, 1): -5.5,
+        datetime(2017, 8, 1): -6.5,
     }
     gen2 = DictGenerator(seq, 'gen2', gen_stream2)
     gen2.attach('s3')
