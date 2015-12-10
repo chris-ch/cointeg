@@ -157,6 +157,21 @@ class StepGenerator(Generator):
         self.emit(seq_ts, 1)
 
 
+class DictGenerator(Generator):
+
+    def __init__(self, sequencer, name, dict_stream):
+        super(DictGenerator, self).__init__(sequencer, name, dimension=1)
+        self._dict_stream = dict_stream
+
+    def start(self):
+        def sequencer_callback(seq_ts):
+            value = self._dict_stream[seq_ts]
+            self.emit(seq_ts, value)
+            
+        for dict_ts in sorted(self._dict_stream.keys()):
+            self.sequencer.expect(dict_ts, sequencer_callback)
+    
+
 class StreamSequencer(object):
 
     def __init__(self):
@@ -195,7 +210,20 @@ if __name__ == '__main__':
     seq = StreamSequencer()
     gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4, count=3)
     gen1.attach('s1')
-    #gen2 = StepGenerator(seq, 'step1', datetime.now() + timedelta(seconds=5))
     l1 = TransferLogger('l1', 4)
     l1.chain(gen1, 'gen1_logger')
+    
+    gen_stream = {
+        datetime(2012, 1, 1): 1.,
+        datetime(2013, 1, 1): 2.,
+        datetime(2014, 1, 1): 3.,
+        datetime(2015, 1, 1): 4.,
+        datetime(2016, 1, 1): 5.,
+        datetime(2017, 1, 1): 6.,
+    }
+    gen2 = DictGenerator(seq, 'gen2', gen_stream)
+    gen2.attach('s2')
+    l2 = TransferLogger('l2', 4)
+    l2.chain(gen2, 'gen1_logger')
+    
     seq.start()
