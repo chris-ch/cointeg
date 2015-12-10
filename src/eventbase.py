@@ -132,16 +132,18 @@ class RandomRealtimeGenerator(Generator):
         self._count = count
 
     def start(self):
+        
+        def sequencer_callback(seq_ts):
+            value = numpy.array(map(lambda f: f(), [random] * self._dimension))
+            logging.info('emitting <%s, %s>', seq_ts, value)
+            self.emit(seq_ts, value)
+        
         while self._count:
             gen_ts = datetime.now()
-            self.sequencer.expect(gen_ts, self.sequencer_callback)
+            self.sequencer.expect(gen_ts, sequencer_callback)
             sleep(1)
             self._count -= 1
 
-    def sequencer_callback(self, seq_ts):
-        value = numpy.array(map(lambda f: f(), [random] * self._dimension))
-        logging.info('emitting <%s, %s>', seq_ts, value)
-        self.emit(seq_ts, value)
 
 
 class StepGenerator(Generator):
@@ -224,6 +226,6 @@ if __name__ == '__main__':
     gen2 = DictGenerator(seq, 'gen2', gen_stream)
     gen2.attach('s2')
     l2 = TransferLogger('l2', 4)
-    l2.chain(gen2, 'gen1_logger')
+    l2.chain(gen2, 'gen2_logger')
     
     seq.start()
