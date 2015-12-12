@@ -1,11 +1,11 @@
 import logging
 from collections import defaultdict
-from random import random
+from random import random, gauss
 from time import sleep
 
-from datetime import datetime, timedelta
+from datetime import datetime
 import numpy
-
+import sys
 
 class Signal(object):
 
@@ -170,54 +170,105 @@ class StreamSequencer(object):
         logging.info('new expect received: %s', sequencer_ts)
         self._expecting[sequencer_ts].add(callback)
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-    # b1 = TransferId('b1', 4)
-    # b1.chain(g1, 'input1')
-    # b1.attach('s2')
-    #
-    # b2 = TransferLogger('l1', 4)
-    # b2.chain(b1, 'input_logger')
-    #
-    # b3 = TransferLogger('l1', 4)
-    # b3.chain(b1, 'input_logger')
 
-    seq = StreamSequencer()
-    #gen1 = RandomRealtimeGenerator(seq, 'gen1', dimension=4, count=3)
-    #gen1.attach('s1')
-    #l1 = TransferLogger('l1', 4)
-    #l1.chain(gen1, 'gen1_logger')
-    
-    gen_stream1 = {
-        datetime(2012, 1, 1): 1.,
-        datetime(2013, 1, 1): 2.,
-        datetime(2014, 1, 1): 3.,
-        datetime(2015, 1, 1): 4.,
-        datetime(2016, 1, 1): 5.,
-        datetime(2017, 1, 1): 6.,
-    }
-    gen2 = DictGenerator(seq, 'gen2', gen_stream1)
-    gen2.attach('s2')
-    l2 = TransferLogger('l2', 4)
-    l2.chain(gen2, 'gen2_logger')
-    
-    gen_stream2 = {
-        datetime(2012, 4, 1): -1.,
-        datetime(2013, 4, 1): -2.,
-        datetime(2014, 4, 1): -3.,
-        datetime(2015, 4, 1): -4.,
-        datetime(2016, 4, 1): -5.,
-        datetime(2017, 4, 1): -6.,
-        datetime(2012, 8, 1): -1.5,
-        datetime(2013, 8, 1): -2.5,
-        datetime(2014, 8, 1): -3.5,
-        datetime(2015, 8, 1): -4.5,
-        datetime(2016, 8, 1): -5.5,
-        datetime(2017, 8, 1): -6.5,
-    }
-    gen2 = DictGenerator(seq, 'gen2', gen_stream2)
-    gen2.attach('s3')
-    l3 = TransferLogger('l3', 4)
-    l3.chain(gen2, 'gen3_logger')
-    
-    seq.start()
+def go_rxpy():
+
+    import rx
+    from rx import Observable, Observer
+    from rx.concurrency import Scheduler, AsyncIOScheduler
+    from rx.subjects import Subject
+
+    class LoggingObserver(Observer):
+
+        def __init__(self, name):
+            Observer.__init__(self)
+            self._name = name
+
+        def on_next(self, x):
+            logging.info('<%s>received: %s', self._name, x)
+
+        def on_error(self, e):
+            logging.info('<%s>error: %s', self._name, e)
+
+        def on_completed(self):
+            logging.info('<%s>sequence completed', self._name)
+
+    def uniform():
+        while True:
+            sleep(0.5)
+            yield gauss(0., 1.)
+
+    gen_white_noise = Observable.from_(uniform())
+
+    def trf_shift(shift):
+        return lambda value: value + shift
+
+    def trf_scale(scale):
+        return lambda value: scale * value
+
+    white_noise_scaled = gen_white_noise.map(trf_scale(5.0)).map(trf_shift(10.0))
+    white_noise_scaled.subscribe(LoggingObserver('white_noise_scaled'))
+    gen_white_noise.subscribe(LoggingObserver('white_noise'))
+
+
+def go_lusmu():
+
+    import lusmu.core
+
+    def gaussian(dummy):
+        return gauss(0., 1.)
+
+    def trf_scale(intercept, slope):
+        return lambda value: intercept + slope * value
+
+    def trf_delay():
+        side_effect_trf_delay = {'previous': None}
+
+        def func_trf_delay(new_value, side_effect=side_effect_trf_delay):
+            previous = side_effect['previous']
+            side_effect['previous'] = new_value
+            return previous
+
+        return func_trf_delay
+
+    def trf_cumul(initial=0.):
+        side_effect_trf_cumul = {'previous': initial}
+
+        def func_trf_cumul(new_value, cumul=side_effect_trf_cumul):
+            cumul['previous'] += new_value
+            return cumul['previous']
+
+        return func_trf_cumul
+
+    clock = lusmu.core.Input('clock')
+    white_noise = lusmu.core.Node(name='white_noise', action=gaussian, inputs=lusmu.core.Node.inputs(clock))
+    white_noise_scaled = lusmu.core.Node(name='white_noise_scaled', action=trf_scale(1., 5.), inputs=lusmu.core.Node.inputs(white_noise))
+    random_walk = lusmu.core.Node(name='random_walk', action=trf_cumul(), inputs=lusmu.core.Node.inputs(white_noise_scaled))
+
+    def output_logger(category):
+        def func(value):
+            logging.info('<%s>value=%s', category, value)
+
+        return func
+
+    lusmu.core.Node(action=output_logger('white_noise'),
+                  inputs=lusmu.core.Node.inputs(white_noise),
+                  triggered=True)
+
+    lusmu.core.Node(action=output_logger('white_noise_scaled'),
+                  inputs=lusmu.core.Node.inputs(white_noise_scaled),
+                  triggered=True)
+
+    lusmu.core.Node(action=output_logger('random_walk'),
+                  inputs=lusmu.core.Node.inputs(random_walk),
+                  triggered=True)
+
+    while True:
+        lusmu.core.update_inputs([(clock, datetime.now())])
+        sleep(0.5)
+        logging.info('---- next step ----')
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+    go_lusmu()
+    sys.exit(0)
