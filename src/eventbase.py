@@ -2,13 +2,12 @@ import logging
 from collections import defaultdict
 from random import random, gauss
 from time import sleep
-
 from datetime import datetime
 import numpy
 import sys
 
-class Signal(object):
 
+class Signal(object):
     def __init__(self, name, dimension):
         self._name = name
         self._value = numpy.empty(dimension)
@@ -38,7 +37,6 @@ class Signal(object):
 
 
 class TransferBlock(object):
-
     def __init__(self, name, count_inputs, dimension):
         self._name = name
         self._inputs = dict()
@@ -83,32 +81,30 @@ class TransferBlock(object):
 
 
 class TransferId(TransferBlock):
-
     def __init__(self, name, dimension):
         super(TransferId, self).__init__(name, count_inputs=1, dimension=dimension)
         self.transfer = lambda x: x
 
 
 class TransferLogger(TransferBlock):
-
     def __init__(self, name, dimension):
         super(TransferLogger, self).__init__(name, count_inputs=1, dimension=dimension)
 
     def on_update(self, update_ts, signal):
         logging.info('signal update: %s', signal)
 
+
 # todo
 class TransferDelayed(TransferBlock):
-
     def __init__(self, name, count_inputs, dimension):
         super(TransferDelayed, self).__init__(name, count_inputs, dimension=dimension)
+
 
 # todo
 TransferSampler = TransferId
 
 
 class Generator(TransferBlock):
-
     def __init__(self, sequencer, name, dimension):
         super(Generator, self).__init__(name, count_inputs=0, dimension=dimension)
         self._sequencer = sequencer
@@ -119,18 +115,16 @@ class Generator(TransferBlock):
 
 
 class RandomRealtimeGenerator(Generator):
-
     def __init__(self, sequencer, name, dimension, count=10):
         super(RandomRealtimeGenerator, self).__init__(sequencer, name, dimension=dimension)
         self._count = count
 
     def start(self):
-        
         def sequencer_callback(seq_ts):
             value = numpy.array(map(lambda f: f(), [random] * self._dimension))
             logging.info('emitting <%s, %s>', seq_ts, value)
             self.emit(seq_ts, value)
-        
+
         while self._count:
             gen_ts = datetime.now()
             self.sequencer.expect(gen_ts, sequencer_callback)
@@ -139,47 +133,43 @@ class RandomRealtimeGenerator(Generator):
 
 
 class DictGenerator(Generator):
-
     def __init__(self, sequencer, name, dict_stream):
         super(DictGenerator, self).__init__(sequencer, name, dimension=1)
         self._dict_stream = dict_stream
-        
+
         def sequencer_callback(seq_ts):
             value = self._dict_stream[seq_ts]
             self.emit(seq_ts, value)
-            
+
         for dict_ts in sorted(self._dict_stream.keys()):
             self.sequencer.expect(dict_ts, sequencer_callback)
-    
+
 
 class StreamSequencer(object):
-
     def __init__(self):
         self._expecting = defaultdict(set)
-        
+
     def start(self):
         while self._expecting:
             next_deadline = min(self._expecting.keys())
             next_callbacks_in_line = self._expecting[next_deadline]
             for callback in next_callbacks_in_line:
                 callback(next_deadline)
-    
+
             self._expecting.pop(next_deadline, None)
-        
+
     def expect(self, sequencer_ts, callback):
         logging.info('new expect received: %s', sequencer_ts)
         self._expecting[sequencer_ts].add(callback)
 
 
 def go_rxpy():
-
     import rx
     from rx import Observable, Observer
     from rx.concurrency import Scheduler, AsyncIOScheduler
     from rx.subjects import Subject
 
     class LoggingObserver(Observer):
-
         def __init__(self, name):
             Observer.__init__(self)
             self._name = name
@@ -212,7 +202,6 @@ def go_rxpy():
 
 
 def go_lusmu():
-
     import lusmu.core
 
     def gaussian(dummy):
@@ -240,33 +229,54 @@ def go_lusmu():
 
         return func_trf_cumul
 
-    clock = lusmu.core.Input('clock')
-    white_noise = lusmu.core.Node(name='white_noise', action=gaussian, inputs=lusmu.core.Node.inputs(clock))
-    white_noise_scaled = lusmu.core.Node(name='white_noise_scaled', action=trf_scale(1., 5.), inputs=lusmu.core.Node.inputs(white_noise))
-    random_walk = lusmu.core.Node(name='random_walk', action=trf_cumul(), inputs=lusmu.core.Node.inputs(white_noise_scaled))
-
-    def output_logger(category):
-        def func(value):
+    def trf_logger(category):
+        def func_trf_logger(value):
             logging.info('<%s>value=%s', category, value)
 
-        return func
+        return func_trf_logger
 
-    lusmu.core.Node(action=output_logger('white_noise'),
-                  inputs=lusmu.core.Node.inputs(white_noise),
-                  triggered=True)
+    class GraphBuilder(object):
 
-    lusmu.core.Node(action=output_logger('white_noise_scaled'),
-                  inputs=lusmu.core.Node.inputs(white_noise_scaled),
-                  triggered=True)
+        def __init__(self):
+            self._nodes = dict()
+            self._clock = lusmu.core.Input('clock')
 
-    lusmu.core.Node(action=output_logger('random_walk'),
-                  inputs=lusmu.core.Node.inputs(random_walk),
-                  triggered=True)
+        def create_node(self, name, action, inputs=None):
+            if inputs is None:
+                inputs = lusmu.core.Node.inputs(self._clock)
 
-    while True:
-        lusmu.core.update_inputs([(clock, datetime.now())])
-        sleep(0.5)
-        logging.info('---- next step ----')
+            else:
+                node_inputs = [self._lookup_node(node_name) for node_name in inputs]
+                inputs = lusmu.core.Node.inputs(*node_inputs)
+
+            node = lusmu.core.Node(name='white_noise', action=gaussian, inputs=inputs)
+            self._nodes[name] = node
+            return node
+
+        def _lookup_node(self, node_name):
+            return self._nodes[node_name]
+
+        def run(self):
+            while True:
+                lusmu.core.update_inputs([(builder._clock, datetime.now())])
+                sleep(0.5)
+                logging.info('---- next step ----')
+
+        def watch(self, node_name, watcher=trf_logger):
+            node = self._lookup_node(node_name)
+            lusmu.core.Node(action=trf_logger(node_name), inputs=lusmu.core.Node.inputs(node), triggered=True)
+
+    builder = GraphBuilder()
+    builder.create_node('white_noise', action=gaussian)
+    builder.create_node('white_noise_scaled', action=trf_scale(1., 5.), inputs=['white_noise'])
+    builder.create_node('random_walk', action=trf_cumul(), inputs=['white_noise_scaled'])
+
+    builder.watch('white_noise')
+    builder.watch('white_noise_scaled')
+    builder.watch('random_walk')
+
+    builder.run()
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
