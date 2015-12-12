@@ -235,6 +235,9 @@ def go_lusmu():
     def trf_constant(constant=0.):
         return lambda dummy: constant
 
+    def trf_linear(*factors):
+        return lambda *values: sum([factor * value for factor, value in zip(factors, values)])
+
     def trf_logger(category):
         def func_trf_logger(value):
             logging.info('<%s>value=%s', category, value)
@@ -245,17 +248,12 @@ def go_lusmu():
 
         def __init__(self):
             self._nodes = dict()
+            self._inputs_by_node = dict()
             self._clock = lusmu.core.Input('clock')
 
         def add_node(self, name, action, inputs=None):
-            if inputs is None:
-                inputs = lusmu.core.Node.inputs(self._clock)
-
-            else:
-                node_inputs = [self._lookup_node(node_name) for node_name in inputs]
-                inputs = lusmu.core.Node.inputs(*node_inputs)
-
-            node = lusmu.core.Node(name=name, action=action, inputs=inputs)
+            node = lusmu.core.Node(name=name, action=action)
+            self._inputs_by_node[node] = inputs
             self._nodes[name] = node
             return node
 
@@ -266,7 +264,21 @@ def go_lusmu():
             node = self._lookup_node(node_name)
             lusmu.core.Node(action=trf_logger(node_name), inputs=lusmu.core.Node.inputs(node), triggered=True)
 
-        def run(self):
+        def connect_inputs(self):
+            for node in self._inputs_by_node.keys():
+                # deferred assignment of inputs
+                deferred_inputs = self._inputs_by_node[node]
+                if deferred_inputs is None:
+                    inputs = lusmu.core.Node.inputs(self._clock)
+
+                else:
+                    node_inputs = [self._lookup_node(node_name) for node_name in deferred_inputs]
+                    inputs = lusmu.core.Node.inputs(*node_inputs)
+
+                node.set_inputs(*inputs[0])
+
+        def start(self):
+
             while True:
                 lusmu.core.update_inputs([(builder._clock, datetime.now())])
                 sleep(0.5)
@@ -278,10 +290,14 @@ def go_lusmu():
     builder.add_node('drift', action=trf_constant(1.))
     builder.add_node('random_walk_increment', action=trf_sum(), inputs=['drift', 'white_noise_scaled'])
     builder.add_node('random_walk', action=trf_cumul(), inputs=['random_walk_increment'])
+    builder.add_node('random_walk_ema_lag', action=trf_delay(initial=0.), inputs=['random_walk_ema'])
+    builder.add_node('random_walk_ema', action=trf_linear(0.1, 0.9), inputs=['random_walk', 'random_walk_ema_lag'])
 
     builder.watch('random_walk')
+    builder.watch('random_walk_ema')
 
-    builder.run()
+    builder.connect_inputs()
+    builder.start()
 
 
 if __name__ == '__main__':
