@@ -204,14 +204,17 @@ def go_rxpy():
 def go_lusmu():
     import lusmu.core
 
-    def gaussian(dummy):
-        return gauss(0., 1.)
+    def trf_gaussian():
+        return lambda dummy: gauss(0., 1.)
+
+    def trf_sum():
+        return lambda value1, value2: value1 + value2
 
     def trf_scale(intercept, slope):
         return lambda value: intercept + slope * value
 
-    def trf_delay():
-        side_effect_trf_delay = {'previous': None}
+    def trf_delay(initial=None):
+        side_effect_trf_delay = {'previous': initial}
 
         def func_trf_delay(new_value, side_effect=side_effect_trf_delay):
             previous = side_effect['previous']
@@ -229,6 +232,9 @@ def go_lusmu():
 
         return func_trf_cumul
 
+    def trf_constant(constant=0.):
+        return lambda dummy: constant
+
     def trf_logger(category):
         def func_trf_logger(value):
             logging.info('<%s>value=%s', category, value)
@@ -241,7 +247,7 @@ def go_lusmu():
             self._nodes = dict()
             self._clock = lusmu.core.Input('clock')
 
-        def create_node(self, name, action, inputs=None):
+        def add_node(self, name, action, inputs=None):
             if inputs is None:
                 inputs = lusmu.core.Node.inputs(self._clock)
 
@@ -249,12 +255,16 @@ def go_lusmu():
                 node_inputs = [self._lookup_node(node_name) for node_name in inputs]
                 inputs = lusmu.core.Node.inputs(*node_inputs)
 
-            node = lusmu.core.Node(name='white_noise', action=gaussian, inputs=inputs)
+            node = lusmu.core.Node(name=name, action=action, inputs=inputs)
             self._nodes[name] = node
             return node
 
         def _lookup_node(self, node_name):
             return self._nodes[node_name]
+
+        def watch(self, node_name, watcher=trf_logger):
+            node = self._lookup_node(node_name)
+            lusmu.core.Node(action=trf_logger(node_name), inputs=lusmu.core.Node.inputs(node), triggered=True)
 
         def run(self):
             while True:
@@ -262,17 +272,13 @@ def go_lusmu():
                 sleep(0.5)
                 logging.info('---- next step ----')
 
-        def watch(self, node_name, watcher=trf_logger):
-            node = self._lookup_node(node_name)
-            lusmu.core.Node(action=trf_logger(node_name), inputs=lusmu.core.Node.inputs(node), triggered=True)
-
     builder = GraphBuilder()
-    builder.create_node('white_noise', action=gaussian)
-    builder.create_node('white_noise_scaled', action=trf_scale(1., 5.), inputs=['white_noise'])
-    builder.create_node('random_walk', action=trf_cumul(), inputs=['white_noise_scaled'])
+    builder.add_node('white_noise', action=trf_gaussian())
+    builder.add_node('white_noise_scaled', action=trf_scale(0., 2.), inputs=['white_noise'])
+    builder.add_node('drift', action=trf_constant(1.))
+    builder.add_node('random_walk_increment', action=trf_sum(), inputs=['drift', 'white_noise_scaled'])
+    builder.add_node('random_walk', action=trf_cumul(), inputs=['random_walk_increment'])
 
-    builder.watch('white_noise')
-    builder.watch('white_noise_scaled')
     builder.watch('random_walk')
 
     builder.run()
